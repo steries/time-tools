@@ -1,0 +1,10 @@
+{
+  "id": "time-tools",
+  "name": "Time Tools",
+  "version": "3.28.0",
+  "minAppVersion": "1.4.0",
+  "description": "Insert a timestamp at the cursor, and run a draggable Pomodoro timer with per-scenario duration presets and session logging.",
+  "author": "Stray",
+  "authorUrl": "https://github.com/steries",
+  "isDesktopOnly": false
+}

@@ -1,0 +1,2182 @@
+/* ==================================================================
+ * 模块一：时间戳插入器 —— tsi- 前缀
+ * ================================================================== */
+
+.tsi-container {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  padding: 12px;
+  gap: 10px;
+  user-select: none;
+}
+
+/* ---- live clock ---- */
+.tsi-preview {
+  font-size: 28px;
+  font-weight: 600;
+  text-align: center;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-normal);
+  padding: 10px 4px 2px 4px;
+  word-break: break-all;
+}
+
+.tsi-hint {
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: -6px;
+}
+
+/* ---- main button ---- */
+.tsi-insert-btn {
+  padding: 12px 14px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  transition: filter 0.15s ease;
+}
+.tsi-insert-btn:hover {
+  filter: brightness(1.12);
+}
+.tsi-insert-btn:active {
+  filter: brightness(0.92);
+}
+
+/* ---- preset list ---- */
+.tsi-section {
+  margin-top: 6px;
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 8px;
+}
+
+.tsi-section-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.tsi-preset-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  min-height: 34px;
+}
+.tsi-preset-row:hover {
+  background-color: var(--background-modifier-hover);
+}
+.tsi-preset-row.is-active {
+  background-color: var(--background-modifier-active-hover);
+}
+.tsi-preset-row.is-active .tsi-preset-label {
+  color: var(--text-accent);
+  font-weight: 600;
+}
+
+.tsi-preset-label {
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tsi-preset-value {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.tsi-tip {
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* ---- settings tab ---- */
+.tsi-settings-preview {
+  font-size: 22px;
+  font-weight: 600;
+  text-align: center;
+  padding: 14px;
+  margin: 4px 0 14px 0;
+  border-radius: 8px;
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
+  font-variant-numeric: tabular-nums;
+}
+
+.tsi-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.tsi-preset-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  font-size: 13px;
+  text-align: left;
+}
+.tsi-preset-btn:hover {
+  background-color: var(--background-modifier-hover);
+}
+.tsi-preset-btn code {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tsi-help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.tsi-help-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.tsi-help-table td:first-child {
+  width: 90px;
+}
+
+/* ---- slash command suggestion ---- */
+.tsi-suggest-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 4px;
+}
+
+.tsi-suggest-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+  font-variant-numeric: tabular-nums;
+}
+
+.tsi-suggest-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ---- mobile setup tip ---- */
+.tsi-mobile-tip {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+  background-color: var(--background-secondary);
+  border-left: 3px solid var(--text-accent);
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin: 8px 0 12px 0;
+}
+
+/* ==================================================================
+ * 统一设置页 —— tt- 前缀
+ * ================================================================== */
+
+/* 顶部标签栏：模仿 Obsidian 原生设置的水平标签 */
+.tt-tab-bar {
+  display: flex;
+  gap: 18px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: 18px;
+}
+
+.tt-tab {
+  position: relative;
+  padding: 6px 2px 8px 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+.tt-tab:hover {
+  color: var(--text-normal);
+}
+.tt-tab.is-active {
+  color: var(--text-normal);
+}
+.tt-tab.is-active::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 2px;
+  border-radius: 1px;
+  background-color: var(--text-accent);
+}
+
+/* ==================================================================
+ * 模块二：番茄钟 —— pomo- 前缀
+ * ================================================================== */
+
+/* ---- 主题 ----
+ *
+ * 四个主题只靠 CSS 变量区分，切换时 pomodoro.js 换一个 class 即可，
+ * 不增删 DOM、不重建浮窗，正在跑的计时不受影响。
+ *
+ * 变量清单（自定义主题可覆盖任意一项，都带兜底值，不写即保持默认）：
+ *   --pomo-focus / --pomo-rest / --pomo-paused  专注色 / 休息色 / 暂停色
+ *   --pomo-focus-soft                           专注态边框色（比 focus 淡）
+ *   --pomo-glow                                 光晕色（流光主题用）
+ *   --pomo-panel-bg / --pomo-panel-border        面板背景 / 边框
+ *   --pomo-radius / --pomo-shadow               圆角 / 阴影
+ *   --pomo-time-size / --pomo-bar-h             时间字号 / 进度条高度
+ *   --pomo-width / --pomo-height / --pomo-pad   宽度 / 最小高度 / 内边距
+ *   --pomo-font-scale                           整体字号缩放倍数（默认 1）
+ *   --pomo-bg-image                             背景图，如 url("xxx.png")
+ *   --pomo-bg-size / -position / -blend         背景图尺寸 / 位置 / 混合模式
+ *   --pomo-actions-justify / -wrap / -gap       按钮行对齐 / 换行 / 间距
+ *
+ * 另有两个语义钩子，供 CSS 判断「现在处于哪一类」，功能代码不参与配色：
+ *   [data-pomo-kind="focus|rest|idle"]  当前段类别（暂停沿用暂停前那一段）
+ *   [data-mini-kind="focus|rest|idle"]  最小化时的徽章类别
+ */
+
+/* ① 经典：即最初那套外观，默认值，老用户升级后看到的不变 */
+.pomo-theme-classic {
+  --pomo-focus: #e87a4a;
+  --pomo-focus-soft: rgba(232, 122, 74, 0.55);
+  --pomo-rest: #3fb08a;
+  --pomo-paused: var(--text-faint);
+  --pomo-panel-bg: var(--background-primary);
+  --pomo-panel-border: var(--background-modifier-border);
+  --pomo-radius: 10px;
+  --pomo-shadow: 0 6px 20px rgba(0, 0, 0, 0.28);
+  --pomo-time-size: 30px;
+  --pomo-bar-h: 4px;
+  --pomo-glow: transparent;
+}
+
+/* ② 极简：浮窗是常驻元素，抢眼会干扰写作 —— 去掉边框、阴影、背景，
+ *    只留文字和一条细进度线，让它退到背景里；需要看时仍然一眼可读。 */
+.pomo-theme-minimal {
+  --pomo-focus: #c96b40;
+  --pomo-focus-soft: transparent;
+  --pomo-rest: #35967a;
+  --pomo-paused: var(--text-faint);
+  --pomo-panel-bg: transparent;
+  --pomo-panel-border: transparent;
+  --pomo-radius: 6px;
+  --pomo-shadow: none;
+  --pomo-time-size: 24px;
+  --pomo-bar-h: 2px;
+  --pomo-glow: transparent;
+}
+/* 极简下按钮降级为纯文字，hover 才浮出底色 */
+.pomo-theme-minimal .pomo-btn {
+  border-color: transparent;
+  background-color: transparent;
+  color: var(--text-muted);
+}
+.pomo-theme-minimal .pomo-btn:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.pomo-theme-minimal .pomo-btn.mod-cta {
+  color: var(--text-accent);
+  background-color: transparent;
+}
+.pomo-theme-minimal .pomo-btn.mod-cta:hover {
+  background-color: var(--background-modifier-hover);
+}
+/* 数字字重降一档，减少视觉压迫 */
+.pomo-theme-minimal .pomo-time {
+  font-weight: 500;
+}
+
+/* ③ 流光：在经典基础上加呼吸光晕 + 流动渐变进度条。
+ *
+ * 性能取舍：光晕用伪元素 + 只动 opacity（合成层，不触发重排重绘），
+ * 而不是给 box-shadow 做动画（那会每帧重绘整块区域）。
+ * 进度条的流动只影响 4px 高、208px 宽的一小块，代价可忽略。 */
+.pomo-theme-dynamic {
+  --pomo-focus: #ff7a45;
+  --pomo-focus-soft: rgba(255, 122, 69, 0.55);
+  --pomo-rest: #2fd39b;
+  --pomo-paused: var(--text-faint);
+  --pomo-panel-bg: var(--background-primary);
+  --pomo-panel-border: var(--background-modifier-border);
+  --pomo-radius: 12px;
+  --pomo-shadow: 0 6px 22px rgba(0, 0, 0, 0.32);
+  --pomo-time-size: 32px;
+  --pomo-bar-h: 5px;
+  --pomo-glow: rgba(255, 122, 69, 0.5);
+}
+/* 呼吸光晕：静态 box-shadow + 动 opacity，避免逐帧重绘 */
+.pomo-theme-dynamic.pomo-float::after,
+.pomo-theme-dynamic.pomo-container::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  box-shadow: 0 0 14px 2px var(--pomo-glow);
+  opacity: 0;
+  pointer-events: none;
+  animation: pomo-breathe 2.8s ease-in-out infinite;
+}
+/* 容器默认不是定位上下文，补一个，否则 ::after 会贴到别的元素上 */
+.pomo-theme-dynamic.pomo-container {
+  position: relative;
+}
+.pomo-theme-dynamic[data-state='short']::after,
+.pomo-theme-dynamic[data-state='long']::after {
+  box-shadow: 0 0 14px 2px rgba(47, 211, 155, 0.45);
+}
+.pomo-theme-dynamic[data-state='paused']::after {
+  animation: none;
+  opacity: 0;
+}
+@keyframes pomo-breathe {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+/* 流动渐变进度条 */
+.pomo-theme-dynamic .pomo-bar-fill {
+  background-image: linear-gradient(
+    90deg,
+    var(--pomo-focus) 0%,
+    #ffb37a 25%,
+    var(--pomo-focus) 50%,
+    #ffb37a 75%,
+    var(--pomo-focus) 100%
+  );
+  background-size: 200% 100%;
+  animation: pomo-flow 1.8s linear infinite;
+}
+.pomo-theme-dynamic[data-state='short'] .pomo-bar-fill,
+.pomo-theme-dynamic[data-state='long'] .pomo-bar-fill {
+  background-image: linear-gradient(
+    90deg,
+    var(--pomo-rest) 0%,
+    #9ff0d0 25%,
+    var(--pomo-rest) 50%,
+    #9ff0d0 75%,
+    var(--pomo-rest) 100%
+  );
+}
+@keyframes pomo-flow {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* 系统开启「减弱动态效果」时自动静止 —— 无障碍要求，不要删 */
+@media (prefers-reduced-motion: reduce) {
+  .pomo-theme-dynamic.pomo-float::after,
+  .pomo-theme-dynamic.pomo-container::after,
+  .pomo-theme-dynamic .pomo-bar-fill {
+    animation: none;
+  }
+}
+
+/* ④ 空灵紫：冷白玻璃底 + 空灵紫主色 + 极轻的水光流动。
+ *
+ * 整段样式由用户提供（配色取自白紫长袍 / 紫蓝渐变裙摆 / 冰蓝水面），
+ * 此处只做了三处适配，原因见下：
+ *   ① 关键帧全部加 pomo-ethereal- 前缀 —— 重名会全局覆盖，
+ *      例如这里的流动动画若沿用 pomo-flow，会把「流光」主题的方向改反。
+ *   ② 选择器同时写 .pomo-float 与 .pomo-container —— 只写浮窗的话
+ *      侧边栏/独立窗口不上色。
+ *   ③ 文字一律显式给深色 —— 面板是冷白底，若沿用 --text-normal，
+ *      在浅色 Obsidian 主题下会变成白字压白底。 */
+.pomo-theme-ethereal {
+  /* ---- 尺寸 ---- */
+  --pomo-width: 248px;
+  --pomo-height: auto;
+  --pomo-pad: 14px 16px 16px;
+  --pomo-font-scale: 1;
+  --pomo-radius: 18px;
+  --pomo-shadow: 0 10px 28px rgba(96, 84, 168, 0.18), 0 2px 6px rgba(96, 84, 168, 0.1);
+
+  /* ---- 配色：紫罗兰 / 冰蓝 / 淡紫 ---- */
+  --pomo-focus: #8b5cf6; /* 专注：紫罗兰，长袍主色 */
+  --pomo-rest: #38bdf8; /* 短休：冰蓝，取自水面 */
+  --pomo-long: #a78bfa; /* 长休：淡紫，裙摆渐变 */
+  --pomo-paused: #a8a3bd; /* 暂停：雾紫灰 */
+  --pomo-panel-bg: rgba(252, 251, 255, 0.9); /* 冷白，微透 */
+  --pomo-panel-border: rgba(139, 92, 246, 0.2);
+
+  /* ---- 背景：极淡的紫→冰蓝→白渐变（当图片用，不引外部文件）---- */
+  --pomo-bg-image: linear-gradient(
+    158deg,
+    rgba(255, 255, 255, 0.78) 0%,
+    rgba(237, 233, 254, 0.58) 48%,
+    rgba(224, 242, 254, 0.62) 100%
+  );
+  --pomo-bg-size: cover;
+  --pomo-bg-position: center;
+  --pomo-bg-blend: normal;
+
+  /* ---- 按钮行 ---- */
+  --pomo-actions-justify: space-between;
+  --pomo-actions-wrap: nowrap;
+  --pomo-actions-gap: 8px;
+
+  --pomo-time-size: 32px;
+  --pomo-bar-h: 6px;
+}
+
+/* 玻璃拟态要作用在两种容器上：浮窗与侧边栏/独立窗口视图 */
+.pomo-theme-ethereal.pomo-float,
+.pomo-theme-ethereal.pomo-container {
+  backdrop-filter: blur(12px) saturate(1.18);
+  background-image: var(--pomo-bg-image);
+  background-size: var(--pomo-bg-size);
+  background-position: var(--pomo-bg-position);
+  background-blend-mode: var(--pomo-bg-blend);
+}
+
+/* ⑤ 自定义：这里**故意不写任何样式**。
+ * 插件只挂 .pomo-theme-custom 这个钩子，外观完全交给用户的 CSS
+ * （设置里的「自定义 CSS」框，或 Obsidian 的 CSS 片段）。
+ * 若哪天在这里加了样式，用户写的就会被覆盖 —— 保持空白。 */
+
+/* ---- 浮窗 ---- */
+.pomo-float {
+  position: fixed;
+  z-index: 1000;
+  width: var(--pomo-width, 208px);
+  min-height: var(--pomo-height, auto);
+  padding: var(--pomo-pad, 10px 12px 12px 12px);
+  border-radius: var(--pomo-radius, 10px);
+  background-color: var(--pomo-panel-bg, var(--background-primary));
+  /* 背景图：四个变量默认都是 none/cover/center/normal，等于没图，
+     用户只在 .pomo-theme-custom 里覆盖即可，不必动别的。 */
+  background-image: var(--pomo-bg-image, none);
+  background-size: var(--pomo-bg-size, cover);
+  background-position: var(--pomo-bg-position, center);
+  background-blend-mode: var(--pomo-bg-blend, normal);
+  border: 1px solid var(--pomo-panel-border, var(--background-modifier-border));
+  box-shadow: var(--pomo-shadow, 0 6px 20px rgba(0, 0, 0, 0.28));
+  user-select: none;
+  /* 整体字号缩放：子元素多用 em，改这一项即可等比放大/缩小 */
+  font-size: calc(13px * var(--pomo-font-scale, 1));
+  transition: box-shadow 0.15s ease;
+}
+.pomo-float.pomo-dragging {
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.36);
+  opacity: 0.94;
+}
+.pomo-float.pomo-hidden {
+  display: none;
+}
+
+.pomo-float-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.pomo-float-header.pomo-drag-handle {
+  cursor: move;
+}
+.pomo-float-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+.pomo-float-cycle {
+  flex: 1;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.pomo-float-btn {
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+.pomo-float-btn:hover {
+  background-color: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.pomo-float-body {
+  text-align: center;
+}
+
+.pomo-state {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.pomo-time {
+  font-size: var(--pomo-time-size, 30px);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  /*
+   * 正计时超过一小时会补出小时位（H:MM:SS），比 MM:SS 多三个字符。
+   * 不加 nowrap 的话窄浮窗里会被折成两行，比溢出更难看 ——
+   * 溢出至少还能靠调 --pomo-width / --pomo-time-size 解决。
+   */
+  white-space: nowrap;
+  letter-spacing: 1px;
+  color: var(--text-normal);
+  line-height: 1.2;
+}
+
+.pomo-dots {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 4px 0 2px 0;
+}
+
+.pomo-bar {
+  height: var(--pomo-bar-h, 4px);
+  border-radius: 2px;
+  background-color: var(--background-modifier-border);
+  overflow: hidden;
+  margin: 2px 0 6px 0;
+}
+.pomo-bar-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 2px;
+  background-color: var(--text-accent);
+}
+
+.pomo-total {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+
+.pomo-float-row {
+  display: flex;
+  gap: 6px;
+}
+
+/* 按钮行：位置 / 换行 / 间距全部变量化，改一个值就能换摆法，不必动 JS。
+ *
+ *   --pomo-actions-justify  space-between（默认，两端对齐）
+ *                          flex-start 靠左 / flex-end 靠右 / center 居中
+ *                          space-around 等距分散
+ *   --pomo-actions-wrap     nowrap（默认） / wrap 窄了自动换行
+ *   --pomo-actions-gap      按钮间距，默认 6px
+ *
+ * 顺序也能改：按钮带 data-act="main|skip|stop"，用 order 即可重排，
+ * 例：.pomo-theme-custom .pomo-btn[data-act='stop'] { order: -1; }
+ */
+.pomo-actions {
+  display: flex;
+  justify-content: var(--pomo-actions-justify, space-between);
+  flex-wrap: var(--pomo-actions-wrap, nowrap);
+  gap: var(--pomo-actions-gap, 6px);
+}
+
+.pomo-btn {
+  flex: 1;
+  padding: 6px 4px;
+  font-size: 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  border: 1px solid var(--background-modifier-border);
+  background-color: var(--background-secondary);
+  color: var(--text-normal);
+}
+.pomo-btn:hover {
+  background-color: var(--background-modifier-hover);
+}
+.pomo-btn.mod-cta {
+  background-color: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border-color: transparent;
+}
+
+/* ---- 状态配色 ----
+ * 三个颜色都走主题变量，括号里是经典主题的兜底值。
+ * 不带主题 class 时（理论上不会发生）也能保持原有外观。 */
+.pomo-float[data-state='focus'],
+.pomo-container[data-state='focus'] {
+  border-color: var(--pomo-focus-soft, rgba(232, 122, 74, 0.55));
+}
+.pomo-float[data-state='focus'] .pomo-time,
+.pomo-container[data-state='focus'] .pomo-time {
+  color: var(--pomo-focus, #e87a4a);
+}
+.pomo-float[data-state='short'] .pomo-time,
+.pomo-float[data-state='long'] .pomo-time,
+.pomo-container[data-state='short'] .pomo-time,
+.pomo-container[data-state='long'] .pomo-time {
+  color: var(--pomo-rest, #3fb08a);
+}
+/* 长休可以单独配色：默认回落到休息色，用户设了 --pomo-long 才区分 */
+.pomo-float[data-state='long'] .pomo-time,
+.pomo-container[data-state='long'] .pomo-time {
+  color: var(--pomo-long, var(--pomo-rest, #3fb08a));
+}
+.pomo-float[data-state='paused'] .pomo-time,
+.pomo-container[data-state='paused'] .pomo-time {
+  color: var(--pomo-paused, var(--text-faint));
+}
+
+/* ---- 空灵紫：倒计时按段类别上色 ---- */
+.pomo-theme-ethereal .pomo-time {
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: #6b6488;
+}
+.pomo-theme-ethereal[data-pomo-kind='focus'] .pomo-time {
+  color: var(--pomo-focus);
+  animation: pomo-ethereal-breathe-focus 3.2s ease-in-out infinite;
+}
+.pomo-theme-ethereal[data-pomo-kind='rest'] .pomo-time {
+  color: var(--pomo-rest);
+  animation: pomo-ethereal-breathe-rest 3.2s ease-in-out infinite;
+}
+/* 长休：kind 也是 rest，靠 data-state 再分一层 */
+.pomo-theme-ethereal[data-state='long'] .pomo-time {
+  color: #7c5cf0;
+  animation: pomo-ethereal-breathe-long 3.2s ease-in-out infinite;
+}
+.pomo-theme-ethereal[data-pomo-kind='idle'] .pomo-time {
+  color: #a09ab5;
+  animation: none;
+}
+.pomo-theme-ethereal[data-state='paused'] .pomo-time {
+  color: var(--pomo-paused);
+  animation: none !important;
+}
+
+/* 呼吸光晕：冷白底上用光晕强弱，克制不晃眼 */
+@keyframes pomo-ethereal-breathe-focus {
+  0%,
+  100% {
+    text-shadow: 0 0 0 rgba(139, 92, 246, 0);
+  }
+  50% {
+    text-shadow: 0 0 14px rgba(139, 92, 246, 0.38);
+  }
+}
+@keyframes pomo-ethereal-breathe-rest {
+  0%,
+  100% {
+    text-shadow: 0 0 0 rgba(56, 189, 248, 0);
+  }
+  50% {
+    text-shadow: 0 0 14px rgba(56, 189, 248, 0.38);
+  }
+}
+@keyframes pomo-ethereal-breathe-long {
+  0%,
+  100% {
+    text-shadow: 0 0 0 rgba(167, 139, 250, 0);
+  }
+  50% {
+    text-shadow: 0 0 14px rgba(167, 139, 250, 0.38);
+  }
+}
+
+/* ---- 最小化 ---- */
+.pomo-float.pomo-mini {
+  width: auto;
+  padding: 6px 10px;
+}
+.pomo-float.pomo-mini .pomo-float-body,
+.pomo-float.pomo-mini .pomo-float-row {
+  display: none;
+}
+.pomo-float.pomo-mini .pomo-float-header {
+  margin-bottom: 0;
+}
+.pomo-float.pomo-mini .pomo-float-cycle {
+  font-size: 13px;
+  color: var(--text-normal);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+/* 标题变成本段模式名并按模式上色；颜色走主题变量，四套主题与自定义 CSS 通用 */
+.pomo-float.pomo-mini .pomo-float-title {
+  font-size: 13px;
+  font-weight: 700;
+}
+.pomo-float.pomo-mini[data-mini-kind='focus'] .pomo-float-title {
+  color: var(--pomo-focus, #e87a4a);
+}
+.pomo-float.pomo-mini[data-mini-kind='rest'] .pomo-float-title {
+  color: var(--pomo-rest, #3fb08a);
+}
+/* 最小化后头部只留恢复按钮 */
+.pomo-float.pomo-mini .pomo-hide-on-mini {
+  display: none;
+}
+
+/* ---- 空灵紫：最小化后颜色加深 + 每秒「跳一下」----
+ * 缩成胶囊后字小、没有进度条陪衬，秒变化容易看漏。
+ * 加深一档拉高对比，再叠 1s 周期的 pop 动画。
+ * 注意：CSS 读不到秒变化本身，1s 周期是视觉近似，观感即每秒跳一下。 */
+.pomo-theme-ethereal.pomo-mini .pomo-time {
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  transform-origin: center;
+}
+.pomo-theme-ethereal.pomo-mini[data-pomo-kind='focus'] .pomo-time {
+  color: #6d28d9; /* 比 --pomo-focus 深一档 */
+  animation: pomo-ethereal-tick-focus 1s steps(1, end) infinite;
+}
+.pomo-theme-ethereal.pomo-mini[data-pomo-kind='rest'] .pomo-time {
+  color: #0284c7; /* 比 --pomo-rest 深一档 */
+  animation: pomo-ethereal-tick-rest 1s steps(1, end) infinite;
+}
+.pomo-theme-ethereal.pomo-mini[data-state='long'] .pomo-time {
+  color: #7c3aed;
+  animation: pomo-ethereal-tick-long 1s steps(1, end) infinite;
+}
+.pomo-theme-ethereal.pomo-mini[data-pomo-kind='idle'] .pomo-time {
+  color: #6b6488;
+}
+/* 暂停时不跳 —— 时间本来就没在走 */
+.pomo-theme-ethereal.pomo-mini[data-state='paused'] .pomo-time {
+  animation: none !important;
+  opacity: 0.75;
+}
+
+@keyframes pomo-ethereal-tick-focus {
+  0% {
+    transform: scale(1.14);
+    opacity: 1;
+    text-shadow: 0 0 10px rgba(139, 92, 246, 0.55);
+  }
+  18% {
+    transform: scale(1);
+    opacity: 1;
+    text-shadow: 0 0 0 rgba(139, 92, 246, 0);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.94;
+  }
+}
+@keyframes pomo-ethereal-tick-rest {
+  0% {
+    transform: scale(1.14);
+    opacity: 1;
+    text-shadow: 0 0 10px rgba(56, 189, 248, 0.55);
+  }
+  18% {
+    transform: scale(1);
+    opacity: 1;
+    text-shadow: 0 0 0 rgba(56, 189, 248, 0);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.94;
+  }
+}
+@keyframes pomo-ethereal-tick-long {
+  0% {
+    transform: scale(1.14);
+    opacity: 1;
+    text-shadow: 0 0 10px rgba(167, 139, 250, 0.55);
+  }
+  18% {
+    transform: scale(1);
+    opacity: 1;
+    text-shadow: 0 0 0 rgba(167, 139, 250, 0);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 0.94;
+  }
+}
+
+/* ---- 空灵紫：进度条胶囊形 + 水光流动 ----
+ * 关键帧名必须带 pomo-ethereal- 前缀：纯 pomo-flow 已归「流光」主题，
+ * 同名会全局覆盖，把那边的流动方向改反。 */
+.pomo-theme-ethereal .pomo-bar {
+  background: rgba(139, 92, 246, 0.16);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.pomo-theme-ethereal .pomo-bar-fill {
+  background-color: transparent;
+  border-radius: 999px;
+  background-image: linear-gradient(90deg, var(--pomo-focus), #c4b5fd, var(--pomo-focus));
+  background-size: 200% 100%;
+  animation: pomo-ethereal-flow 2.6s linear infinite;
+}
+.pomo-theme-ethereal[data-pomo-kind='rest'] .pomo-bar-fill {
+  background-image: linear-gradient(90deg, var(--pomo-rest), #bae6fd, var(--pomo-rest));
+}
+.pomo-theme-ethereal[data-state='long'] .pomo-bar-fill {
+  background-image: linear-gradient(90deg, #a78bfa, #e9d5ff, #a78bfa);
+}
+.pomo-theme-ethereal[data-state='paused'] .pomo-bar-fill {
+  background-image: none;
+  background-color: var(--pomo-paused);
+  animation: none;
+}
+@keyframes pomo-ethereal-flow {
+  from {
+    background-position: 0 0;
+  }
+  to {
+    background-position: 200% 0;
+  }
+}
+
+/* ---- 空灵紫：按钮淡紫描边玻璃，主按钮紫罗兰渐变 ---- */
+.pomo-theme-ethereal .pomo-btn {
+  border-radius: 999px;
+  border: 1px solid rgba(139, 92, 246, 0.26);
+  background: rgba(255, 255, 255, 0.72);
+  color: #5f5880;
+  font-weight: 600;
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+.pomo-theme-ethereal .pomo-btn:hover {
+  transform: translateY(-1px);
+  background: #ffffff;
+  box-shadow: 0 4px 10px rgba(139, 92, 246, 0.24);
+}
+.pomo-theme-ethereal .pomo-btn:active {
+  transform: translateY(0) scale(0.97);
+}
+.pomo-theme-ethereal .pomo-btn.mod-cta {
+  background: linear-gradient(180deg, #a78bfa, var(--pomo-focus));
+  border-color: transparent;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.38);
+}
+.pomo-theme-ethereal .pomo-btn.mod-cta:hover {
+  box-shadow: 0 6px 16px rgba(139, 92, 246, 0.48);
+}
+
+/* 次要文字压淡，把焦点让给倒计时；面板是浅色，故显式给深色而非沿用主题变量 */
+.pomo-theme-ethereal .pomo-float-title {
+  color: #615a80;
+}
+.pomo-theme-ethereal .pomo-float-cycle,
+.pomo-theme-ethereal .pomo-state,
+.pomo-theme-ethereal .pomo-dots,
+.pomo-theme-ethereal .pomo-total {
+  color: #9c96ad;
+}
+.pomo-theme-ethereal .pomo-float-btn {
+  color: #615a80;
+}
+.pomo-theme-ethereal .pomo-float-btn:hover {
+  background: rgba(139, 92, 246, 0.14);
+  color: #5f5880;
+}
+
+/* 最小化：胶囊态。overflow 保持 visible，否则 scale 动画会被裁掉 */
+.pomo-theme-ethereal.pomo-mini {
+  border-radius: 999px;
+  padding: 6px 16px;
+  --pomo-panel-bg: rgba(252, 251, 255, 0.96);
+  box-shadow: 0 6px 18px rgba(96, 84, 168, 0.2);
+  overflow: visible;
+}
+
+/* 系统开启「减弱动态效果」时全部静止 —— 无障碍要求，不要删 */
+@media (prefers-reduced-motion: reduce) {
+  .pomo-theme-ethereal .pomo-time,
+  .pomo-theme-ethereal.pomo-mini .pomo-time,
+  .pomo-theme-ethereal .pomo-bar-fill {
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+ * 番茄钟 · 「赤镰」主题（暗黑 + 镰刃红血流）
+ *
+ * 由来：由用户提供的自定义 CSS 整段转入。转入时做了两处必要改造：
+ *   ① 选择器从 .pomo-theme-custom 改为 .pomo-theme-scythe；
+ *   ② 所有 @keyframes 加 pomo-scythe- 前缀 —— 关键帧是全局的，
+ *      重名会互相覆盖（流光/空灵紫已占用一批通用名）。
+ * 另外给面板自身的背景规则加了 .pomo-float / .pomo-container 组合，
+ * 否则与 .pomo-float 自带的 background 同特异性，会按先后顺序被吃掉。
+ *
+ * 注意：底色是实色（不可用半透明），否则会透出血流层。
+ * ============================================================ */
+
+.pomo-theme-scythe.pomo-float,
+.pomo-theme-scythe.pomo-container {
+  --pomo-width: 252px;
+  --pomo-height: auto;
+  --pomo-pad: 16px 18px 18px;
+  --pomo-font-scale: 1;
+  --pomo-radius: 14px;
+  --pomo-shadow:
+    0 14px 34px rgba(0, 0, 0, 0.60),
+    0 2px 8px rgba(0, 0, 0, 0.40);
+
+  --pomo-focus: #ff4d4d;
+  --pomo-rest: #c8cdd4;
+  --pomo-long: #e8827a;
+  --pomo-paused: #6b7078;
+  --pomo-panel-bg: #121014;
+  --pomo-panel-border: transparent;
+
+  --pomo-actions-justify: space-between;
+  --pomo-actions-wrap: nowrap;
+  --pomo-actions-gap: 8px;
+
+  --pomo-time-size: 34px;
+  --pomo-bar-h: 7px;
+
+  border: 2px solid transparent;
+  background:
+    radial-gradient(120% 80% at 85% 0%, rgba(255, 77, 77, 0.13) 0%, transparent 62%) padding-box,
+    linear-gradient(#121014, #121014) padding-box,
+    linear-gradient(
+      100deg,
+      transparent 0%,
+      rgba(255, 77, 77, 0.07) 4%,
+      rgba(255, 77, 77, 0.52) 9%,
+      rgba(190, 30, 42, 0.28) 14%,
+      rgba(255, 77, 77, 0.12) 21%,
+      transparent 30%,
+      transparent 50%,
+      rgba(255, 77, 77, 0.07) 54%,
+      rgba(255, 77, 77, 0.52) 59%,
+      rgba(190, 30, 42, 0.28) 64%,
+      rgba(255, 77, 77, 0.12) 71%,
+      transparent 80%,
+      transparent 100%
+    ) border-box,
+    linear-gradient(
+      160deg,
+      rgba(255, 77, 77, 0.16),
+      rgba(120, 20, 30, 0.10) 50%,
+      rgba(255, 77, 77, 0.12)
+    ) border-box;
+  background-size: 100% 100%, auto, 200% 100%, auto;
+  background-position: 0 0, 0 0, 0% 0, 0 0;
+
+  animation:
+    pomo-scythe-blood-rest 16s linear infinite,
+    pomo-scythe-red-float-rest 14s ease-in-out infinite;
+}
+
+@keyframes pomo-scythe-blood-rest {
+  from { background-position: 0 0, 0 0, 0% 0, 0 0; }
+  to   { background-position: 0 0, 0 0, 100% 0, 0 0; }
+}
+
+.pomo-theme-scythe.pomo-float[data-pomo-kind='focus'],
+.pomo-theme-scythe.pomo-container[data-pomo-kind='focus'] {
+  border: 2px solid transparent;
+  background:
+    radial-gradient(120% 90% at 82% 8%, rgba(255, 77, 77, 0.14) 0%, transparent 64%) padding-box,
+    linear-gradient(#130f10, #130f10) padding-box,
+    linear-gradient(
+      100deg,
+      transparent 0%,
+      rgba(255, 77, 77, 0.10) 4%,
+      rgba(255, 100, 100, 0.92) 9%,
+      rgba(255, 92, 92, 0.62) 12%,
+      rgba(190, 30, 42, 0.42) 16%,
+      rgba(255, 77, 77, 0.18) 24%,
+      transparent 32%,
+      transparent 50%,
+      rgba(255, 77, 77, 0.10) 54%,
+      rgba(255, 100, 100, 0.92) 59%,
+      rgba(255, 92, 92, 0.62) 62%,
+      rgba(190, 30, 42, 0.42) 66%,
+      rgba(255, 77, 77, 0.18) 74%,
+      transparent 82%,
+      transparent 100%
+    ) border-box,
+    linear-gradient(
+      160deg,
+      rgba(255, 77, 77, 0.30),
+      rgba(140, 24, 34, 0.20) 50%,
+      rgba(255, 77, 77, 0.26)
+    ) border-box;
+  background-size: 100% 100%, auto, 200% 100%, auto;
+  background-position: 0 0, 0 0, 0% 0, 0 0;
+
+  animation:
+    pomo-scythe-blood-focus 3.4s linear infinite,
+    pomo-scythe-red-float 9s ease-in-out infinite;
+}
+
+@keyframes pomo-scythe-blood-focus {
+  from { background-position: 0 0, 0 0, 0% 0, 0 0; }
+  to   { background-position: 0 0, 0 0, 100% 0, 0 0; }
+}
+
+@keyframes pomo-scythe-red-float {
+  0% {
+    box-shadow:
+      0 14px 34px rgba(0, 0, 0, 0.60),
+      0 2px 8px rgba(0, 0, 0, 0.40),
+      0 0 14px rgba(255, 77, 77, 0.07),
+      inset 34px -26px 74px -28px rgba(255, 77, 77, 0.07);
+  }
+  32% {
+    box-shadow:
+      0 14px 34px rgba(0, 0, 0, 0.60),
+      0 2px 8px rgba(0, 0, 0, 0.40),
+      0 0 17px rgba(255, 77, 77, 0.10),
+      inset -30px -14px 82px -28px rgba(255, 77, 77, 0.05);
+  }
+  64% {
+    box-shadow:
+      0 14px 34px rgba(0, 0, 0, 0.60),
+      0 2px 8px rgba(0, 0, 0, 0.40),
+      0 0 14px rgba(255, 77, 77, 0.07),
+      inset 12px 30px 76px -28px rgba(255, 77, 77, 0.06);
+  }
+  100% {
+    box-shadow:
+      0 14px 34px rgba(0, 0, 0, 0.60),
+      0 2px 8px rgba(0, 0, 0, 0.40),
+      0 0 14px rgba(255, 77, 77, 0.07),
+      inset 34px -26px 74px -28px rgba(255, 77, 77, 0.07);
+  }
+}
+
+@keyframes pomo-scythe-red-float-rest {
+  0% {
+    box-shadow:
+      0 14px 34px rgba(0, 0, 0, 0.60),
+      0 2px 8px rgba(0, 0, 0, 0.40),
+      0 0 12px rgba(255, 77, 77, 0.05),
+      inset 30px -22px 78px -30px rgba(255, 77, 77, 0.040);
+  }
+  34% {
+    box-shadow:
+      0 14px 34px rgba(0, 0, 0, 0.60),
+      0 2px 8px rgba(0, 0, 0, 0.40),
+      0 0 15px rgba(255, 77, 77, 0.08),
+      inset -26px -12px 84px -30px rgba(255, 77, 77, 0.030);
+  }
+  66% {
+    box-shadow:
+      0 14px 34px rgba(0, 0, 0, 0.60),
+      0 2px 8px rgba(0, 0, 0, 0.40),
+      0 0 12px rgba(255, 77, 77, 0.05),
+      inset 10px 26px 80px -30px rgba(255, 77, 77, 0.035);
+  }
+  100% {
+    box-shadow:
+      0 14px 34px rgba(0, 0, 0, 0.60),
+      0 2px 8px rgba(0, 0, 0, 0.40),
+      0 0 12px rgba(255, 77, 77, 0.05),
+      inset 30px -22px 78px -30px rgba(255, 77, 77, 0.040);
+  }
+}
+
+.pomo-theme-scythe.pomo-float[data-state='paused'],
+.pomo-theme-scythe.pomo-container[data-state='paused'] {
+  animation: none !important;
+}
+
+.pomo-theme-scythe .pomo-time {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+  color: #e8eaef;
+}
+.pomo-theme-scythe[data-pomo-kind='focus'] .pomo-time {
+  color: var(--pomo-focus);
+  animation: pomo-scythe-time-breathe 5.5s ease-in-out infinite;
+}
+.pomo-theme-scythe[data-pomo-kind='rest'] .pomo-time {
+  color: var(--pomo-rest);
+  animation: pomo-scythe-time-breathe-rest 9s ease-in-out infinite;
+}
+.pomo-theme-scythe[data-state='long'] .pomo-time {
+  color: var(--pomo-long);
+}
+.pomo-theme-scythe[data-pomo-kind='idle'] .pomo-time {
+  color: #7b818b;
+}
+.pomo-theme-scythe[data-state='paused'] .pomo-time {
+  color: var(--pomo-paused);
+}
+
+@keyframes pomo-scythe-time-breathe {
+  0%, 100% { text-shadow: 0 0 0 rgba(255, 77, 77, 0); }
+  50%      { text-shadow: 0 0 13px rgba(255, 77, 77, 0.17); }
+}
+@keyframes pomo-scythe-time-breathe-rest {
+  0%, 100% { text-shadow: 0 0 0 rgba(255, 77, 77, 0); }
+  50%      { text-shadow: 0 0 12px rgba(255, 77, 77, 0.07); }
+}
+
+.pomo-theme-scythe.pomo-mini .pomo-time {
+  font-weight: 800;
+  letter-spacing: 0;
+  transform-origin: center;
+  font-variant-numeric: tabular-nums;
+}
+.pomo-theme-scythe.pomo-mini[data-pomo-kind='focus'] .pomo-time {
+  color: #ff8078;
+  animation: pomo-scythe-tick-focus 1s steps(1, end) infinite;
+}
+.pomo-theme-scythe.pomo-mini[data-pomo-kind='rest'] .pomo-time {
+  color: #eef1f6;
+  animation: pomo-scythe-tick-rest 1s steps(1, end) infinite;
+}
+.pomo-theme-scythe.pomo-mini[data-state='long'] .pomo-time {
+  color: #ffb0a6;
+  animation: pomo-scythe-tick-long 1s steps(1, end) infinite;
+}
+.pomo-theme-scythe.pomo-mini[data-pomo-kind='idle'] .pomo-time {
+  color: #b6bcc6;
+}
+.pomo-theme-scythe.pomo-mini[data-state='paused'] .pomo-time {
+  animation: none !important;
+  opacity: 0.7;
+}
+
+@keyframes pomo-scythe-tick-focus {
+  0%   { transform: scale(1.13); opacity: 1;    text-shadow: 0 0 14px rgba(255, 77, 77, 0.85); }
+  18%  { transform: scale(1);    opacity: 1;    text-shadow: 0 0 5px rgba(255, 77, 77, 0.30); }
+  100% { transform: scale(1);    opacity: 0.93; }
+}
+@keyframes pomo-scythe-tick-rest {
+  0%   { transform: scale(1.13); opacity: 1;    text-shadow: 0 0 14px rgba(238, 241, 246, 0.70); }
+  18%  { transform: scale(1);    opacity: 1;    text-shadow: 0 0 4px rgba(238, 241, 246, 0.22); }
+  100% { transform: scale(1);    opacity: 0.93; }
+}
+@keyframes pomo-scythe-tick-long {
+  0%   { transform: scale(1.13); opacity: 1;    text-shadow: 0 0 14px rgba(232, 130, 122, 0.80); }
+  18%  { transform: scale(1);    opacity: 1;    text-shadow: 0 0 5px rgba(232, 130, 122, 0.28); }
+  100% { transform: scale(1);    opacity: 0.93; }
+}
+
+.pomo-theme-scythe .pomo-bar {
+  background: rgba(255, 255, 255, 0.07);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.pomo-theme-scythe .pomo-bar-fill {
+  position: relative;
+  border-radius: 2px;
+  background-color: var(--pomo-focus);
+  background-image: linear-gradient(90deg, #b32222, var(--pomo-focus));
+  box-shadow: 0 0 8px rgba(255, 77, 77, 0.35);
+}
+.pomo-theme-scythe .pomo-bar-fill::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    105deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.06) 35%,
+    rgba(255, 255, 255, 0.42) 50%,
+    rgba(255, 255, 255, 0.06) 65%,
+    transparent 100%
+  );
+  background-size: 28px 100%;
+  background-repeat: no-repeat;
+  animation: pomo-scythe-sweep 2.8s ease-in-out infinite;
+}
+@keyframes pomo-scythe-sweep {
+  from { background-position: -28px 0; }
+  to   { background-position: calc(100% + 28px) 0; }
+}
+.pomo-theme-scythe[data-pomo-kind='rest'] .pomo-bar-fill {
+  background-color: #9aa2ae;
+  background-image: linear-gradient(90deg, #6b7078, #9aa2ae);
+  box-shadow: 0 0 6px rgba(154, 164, 178, 0.30);
+}
+.pomo-theme-scythe[data-state='long'] .pomo-bar-fill {
+  background-color: var(--pomo-long);
+  background-image: linear-gradient(90deg, #a8443c, var(--pomo-long));
+  box-shadow: 0 0 8px rgba(232, 130, 122, 0.35);
+}
+.pomo-theme-scythe[data-state='paused'] .pomo-bar-fill {
+  background-image: none;
+  background-color: var(--pomo-paused);
+  box-shadow: none;
+}
+.pomo-theme-scythe[data-state='paused'] .pomo-bar-fill::after {
+  animation: none;
+  opacity: 0.2;
+}
+
+.pomo-theme-scythe .pomo-btn {
+  border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+  color: #aab1bb;
+  font-weight: 600;
+  transition: transform 0.16s ease, background 0.16s ease, box-shadow 0.16s ease;
+}
+.pomo-theme-scythe .pomo-btn:hover {
+  transform: translateY(-1px);
+  background: rgba(255, 77, 77, 0.12);
+  border-color: rgba(255, 77, 77, 0.30);
+  color: #eaeef4;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
+}
+.pomo-theme-scythe .pomo-btn:active {
+  transform: translateY(0) scale(0.97);
+}
+.pomo-theme-scythe .pomo-btn.mod-cta {
+  background: linear-gradient(180deg, #ff6a5e, var(--pomo-focus));
+  border-color: transparent;
+  color: #ffffff;
+  font-weight: 700;
+  box-shadow: 0 4px 14px rgba(255, 77, 77, 0.42);
+}
+.pomo-theme-scythe .pomo-btn.mod-cta:hover {
+  box-shadow: 0 6px 18px rgba(255, 77, 77, 0.58);
+}
+
+.pomo-theme-scythe .pomo-float-title { color: #9298a3; }
+.pomo-theme-scythe .pomo-float-cycle,
+.pomo-theme-scythe .pomo-state,
+.pomo-theme-scythe .pomo-dots,
+.pomo-theme-scythe .pomo-total {
+  color: rgba(255, 255, 255, 0.40);
+}
+.pomo-theme-scythe[data-pomo-kind='focus'] .pomo-state {
+  color: rgba(255, 77, 77, 0.72);
+}
+.pomo-theme-scythe[data-state='long'] .pomo-state {
+  color: rgba(232, 130, 122, 0.70);
+}
+.pomo-theme-scythe .pomo-float-btn:hover {
+  background: rgba(255, 77, 77, 0.14);
+  color: #eaeef4;
+}
+
+.pomo-theme-scythe.pomo-mini {
+  border-radius: 999px;
+  padding: 6px 17px;
+  --pomo-panel-bg: #0a0b10;
+  border: 2px solid transparent;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.62);
+  overflow: visible;
+}
+.pomo-theme-scythe.pomo-mini[data-pomo-kind='focus'] {
+  background:
+    radial-gradient(120% 90% at 82% 8%, rgba(255, 77, 77, 0.14) 0%, transparent 64%) padding-box,
+    linear-gradient(#130f10, #130f10) padding-box,
+    linear-gradient(
+      100deg,
+      transparent 0%,
+      rgba(255, 77, 77, 0.10) 4%,
+      rgba(255, 100, 100, 0.92) 9%,
+      rgba(255, 92, 92, 0.62) 12%,
+      rgba(190, 30, 42, 0.42) 16%,
+      rgba(255, 77, 77, 0.18) 24%,
+      transparent 32%,
+      transparent 50%,
+      rgba(255, 77, 77, 0.10) 54%,
+      rgba(255, 100, 100, 0.92) 59%,
+      rgba(255, 92, 92, 0.62) 62%,
+      rgba(190, 30, 42, 0.42) 66%,
+      rgba(255, 77, 77, 0.18) 74%,
+      transparent 82%,
+      transparent 100%
+    ) border-box,
+    linear-gradient(
+      160deg,
+      rgba(255, 77, 77, 0.30),
+      rgba(140, 24, 34, 0.20) 50%,
+      rgba(255, 77, 77, 0.26)
+    ) border-box;
+  background-size: 100% 100%, auto, 200% 100%, auto;
+  background-position: 0 0, 0 0, 0% 0, 0 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pomo-theme-scythe,
+  .pomo-theme-scythe .pomo-time,
+  .pomo-theme-scythe.pomo-mini .pomo-time,
+  .pomo-theme-scythe .pomo-bar-fill::after {
+    animation: none !important;
+  }
+}
+
+/* ---- 状态栏 ---- */
+.pomo-status {
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- 侧边栏视图 ---- */
+.pomo-container {
+  display: flex;
+  flex-direction: column;
+  padding: 12px;
+  text-align: center;
+  user-select: none;
+}
+.pomo-container .pomo-time {
+  font-size: calc(var(--pomo-time-size, 30px) - 4px);
+}
+.pomo-container .pomo-float-row {
+  margin-top: 10px;
+}
+.pomo-tip {
+  font-size: 11px;
+  color: var(--text-faint);
+  text-align: center;
+  margin-top: 8px;
+  line-height: 1.5;
+}
+
+/* 设置页里那份可整段复制的 CSS 模板。
+ * user-select 要显式开：番茄钟浮窗整体是 user-select:none，
+ * 这里不加就选不中，模板复制不了。 */
+.pomo-css-template {
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  background-color: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin: 6px 0 8px 0;
+  max-height: 280px;
+  overflow: auto;
+  user-select: text;
+}
+
+/* ---- 弹窗 ---- */
+.pomo-modal h3 {
+  margin: 4px 0 6px 0;
+}
+.pomo-modal-desc {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.pomo-modal-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+/* 结束弹窗按钮区：记录在左，Again + 好的成组靠右 */
+.pomo-modal-row-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.pomo-modal-row-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
+/* 防误关提示：点遮罩没关掉时告诉用户还差几次 */
+.pomo-dismiss-hint {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-accent);
+  text-align: right;
+}
+
+/* 点遮罩没关掉时抖一下，避免用户以为点击没生效 */
+@keyframes pomo-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+.pomo-shake {
+  animation: pomo-shake 160ms ease-in-out;
+}
+
+.pomo-btn.mod-record {
+  background-color: #3b82f6;
+  color: #ffffff;
+  border-color: transparent;
+  font-weight: 600;
+}
+.pomo-btn.mod-record:hover {
+  background-color: #2f6fdc;
+}
+
+/* Again 用中性灰，弱化于主按钮 */
+.pomo-modal-row-right .pomo-btn:not(.mod-cta) {
+  background-color: var(--background-modifier-hover);
+}
+
+/* 统计区：数值等宽对齐，更整齐 */
+.pomo-summary {
+  padding: 12px 14px;
+  border-radius: 8px;
+  background-color: var(--background-secondary);
+  margin-bottom: 4px;
+}
+
+.pomo-summary-row {
+  font-size: 14px;
+  color: var(--text-normal);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.8;
+}
+
+.pomo-summary-row.mod-dim {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.pomo-summary-row.mod-warn {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--text-warning);
+}
+
+/* 启动面板里的方案预览 */
+.pomo-modal .pomo-summary {
+  margin-bottom: 8px;
+}
+
+/* 通用隐藏（记录区块展开 / 浮窗隐藏共用） */
+.pomo-hidden {
+  display: none;
+}
+
+/* ---- 记录区块 ---- */
+
+.pomo-record-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 2px 0 6px 0;
+  line-height: 1.6;
+}
+
+.pomo-help-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+.pomo-help-table td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.pomo-help-table td:first-child {
+  width: 180px;
+}
+.pomo-modal-row .pomo-btn {
+  flex: 0 0 auto;
+  padding: 7px 16px;
+}
+
+/* 准备开始面板里的「计时方式」：左边一句说明，右边倒计时 / 正计时两个按钮 */
+.pomo-mode-row {
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.pomo-mode-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  flex: 1 1 auto;
+}
+
+/* ---- 斜杠命令建议 ---- */
+.pomo-suggest-item {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 2px 4px;
+}
+.pomo-suggest-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+.pomo-suggest-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ================================================================== *
+ * 扩展：时间文本转换（tta- 前缀，隶属 tt- 命名空间）
+ * ================================================================== */
+
+.tta-source {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background-color: var(--background-secondary);
+  margin-bottom: 12px;
+}
+
+.tta-source-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.tta-source-value {
+  font-size: 14px;
+  color: var(--text-normal);
+  word-break: break-all;
+  font-variant-numeric: tabular-nums;
+}
+
+.tta-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.tta-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--background-modifier-border);
+}
+
+.tta-item-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.tta-item-name {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+}
+
+.tta-item-result {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-normal);
+  word-break: break-all;
+  font-variant-numeric: tabular-nums;
+}
+
+.tta-empty {
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.7;
+  padding: 10px 0;
+}
+
+.tta-shift {
+  padding-top: 10px;
+  border-top: 1px solid var(--background-modifier-border);
+  margin-bottom: 10px;
+}
+
+.tta-shift-title {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.tta-shift-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tta-shift-row input {
+  width: 90px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+}
+
+.tta-shift-preview {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--text-accent);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 农历输入提示 */
+
+/* 提示文字：开始面板与设置页的软提示共用 */
+.pomo-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: -6px 0 14px 0;
+  padding-left: 2px;
+}
+
+/* ================================================================== *
+ * 设置页附加区块（注册制）
+ * ================================================================== */
+
+.tt-section {
+  margin-top: 22px;
+  padding-top: 16px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+
+.tt-section-error {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text-error);
+  background-color: var(--background-modifier-error);
+}
+
+/* 时间转换设置页的分组标题 */
+.tsi-section {
+  margin-top: 14px;
+}
+
+.tsi-section-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-accent);
+  margin: 10px 0 4px 0;
+}
+
+/* 相对时间的基准输入框 */
+.tta-base {
+  margin: 8px 0 10px 0;
+}
+
+.tta-base-title {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+.tta-base-row input {
+  width: 100%;
+}
+
+.tta-base-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.tta-base-hint.is-warn {
+  color: var(--text-warning);
+}
+
+/* 空态：给出可直接看的答案，而不是只说识别不出 */
+.tta-empty-title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.tta-empty-answer {
+  font-family: var(--font-monospace);
+  font-size: 14px;
+  color: var(--text-accent);
+  margin-bottom: 6px;
+}
+
+.tta-empty-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* 转换项分组：可折叠 */
+.tsi-section-title.is-clickable {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tsi-section-title.is-clickable::after {
+  content: '▾';
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: 8px;
+}
+
+.tsi-section-title.is-closed::after {
+  content: '▸';
+}
+
+.tsi-section-count {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-muted);
+  margin-left: auto;
+  margin-right: 8px;
+}
+
+.tsi-section-body.is-collapsed {
+  display: none;
+}
+
+/* 时段小时值设置 */
+.tsi-daypart {
+  margin: 6px 0 10px 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--background-modifier-border);
+}
+
+.tsi-daypart-title {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+}
+
+/* 撤回提示 */
+.tts-undo-tip {
+  font-size: 12px;
+  color: var(--text-muted);
+  padding: 4px 0 8px 0;
+}
+
+/* 撤回标记：编辑器里的可点击装饰，不占正文字符 */
+.tt-undo-badge {
+  cursor: pointer;
+  margin-left: 2px;
+  padding: 0 4px;
+  border-radius: 3px;
+  font-size: 0.85em;
+  opacity: 0.65;
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+  user-select: none;
+}
+.tt-undo-badge:hover {
+  opacity: 1;
+  background: var(--interactive-accent);
+  color: var(--interactive-accent-text);
+}
+
+/* 状态栏撤回指示器：不依赖编辑器装饰，始终可见 */
+.tt-undo-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  cursor: pointer;
+  padding: 0 6px;
+  border-radius: 3px;
+  font-size: 0.9em;
+  color: var(--text-muted);
+  user-select: none;
+}
+.tt-undo-status:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+.tt-undo-status-icon {
+  display: inline-flex;
+  align-items: center;
+}
+.tt-undo-status-icon svg {
+  width: 13px;
+  height: 13px;
+}
+
+/* 设置页渲染失败时的兜底提示（不抛错，避免连累其他插件的设置页） */
+.tt-settings-error {
+  padding: 10px 12px;
+  border-radius: 6px;
+  color: var(--text-error);
+  background: var(--background-modifier-error);
+  white-space: pre-wrap;
+}
+
+/* ---- 模块四：日历设置页 ---- */
+.tt-cal-intro {
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  background: var(--background-secondary);
+  line-height: 1.5;
+}
+
+.tt-cal-status {
+  padding: 6px 10px;
+  margin: 4px 0 12px;
+  border-radius: 6px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-normal);
+  background: var(--background-modifier-border);
+  word-break: break-all;
+}
+
+/* ---- 自研日历视图 ---- */
+.tt-cal-view { padding: 8px; user-select: none; }
+
+.tt-cal-head {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 10px;
+}
+.tt-cal-title-wrap {
+  display: flex; align-items: baseline; gap: 6px; flex: 1; justify-content: center;
+  flex-wrap: wrap;         /* 空间不够时自动换行 */
+  min-width: 0;            /* 允许收缩，否则窄栏里不会触发换行 */
+  row-gap: 0;
+}
+/* 窄栏：月份在上、年份在下。宽度由 JS 的 ResizeObserver 判定后加类 */
+.tt-cal-view.is-narrow .tt-cal-title-wrap {
+  flex-direction: column; align-items: center; gap: 0; line-height: 1.15;
+}
+/* 顺序：月份在前，年份在后（DOM 里也是这个顺序） */
+.tt-cal-month { font-size: 1.15em; font-weight: 600; color: var(--text-normal); }
+.tt-cal-year { font-size: 1.15em; font-weight: 600; color: var(--interactive-accent); }
+.tt-cal-clickable { cursor: pointer; border-radius: 4px; padding: 1px 4px; }
+.tt-cal-clickable:hover { background: var(--background-modifier-hover); }
+.tt-cal-nav, .tt-cal-today {
+  cursor: pointer; border: none; border-radius: 4px; padding: 2px 8px;
+  background: var(--background-modifier-border); color: var(--text-normal);
+}
+.tt-cal-nav:hover, .tt-cal-today:hover { background: var(--background-modifier-hover); }
+
+.tt-cal-grid {
+  display: grid; gap: 2px;
+  /*
+   * minmax(0, 1fr) 而非 1fr：
+   * 1fr 默认 min-width:auto，内容多宽格子就多宽，侧栏拉窄时压不下去会溢出。
+   */
+  grid-template-columns: auto repeat(7, minmax(0, 1fr));
+}
+
+/* 自适应（默认）：6 行均分可用高度，面板拉高时填满、底部不留空 */
+.tt-cal-view.is-fluid { height: 100%; display: flex; flex-direction: column; }
+.tt-cal-view.is-fluid .tt-cal-grid {
+  grid-template-rows: repeat(6, minmax(0, 1fr));
+  flex: 1; min-height: 0;
+}
+
+/*
+ * 固定尺寸：格子高度固定，不随面板拉伸，排布紧凑。
+ * 保留此模式是为了后续做月历视图可直接复用。
+ */
+.tt-cal-view.is-fixed .tt-cal-grid {
+  grid-template-rows: repeat(6, var(--tt-cal-cell-h, 2.2em));
+  align-content: start;
+}
+.tt-cal-view.is-fixed .tt-cal-cell {
+  min-height: var(--tt-cal-cell-h, 2.2em);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  overflow: hidden;
+}
+.tt-cal-view { container-type: inline-size; }
+
+/* 窄栏两级降级：先缩字号，再缩圆点每行个数，避免挤成一团 */
+@container (max-width: 260px) {
+  .tt-cal-cell { padding: 2px 1px; font-size: var(--font-ui-smaller); }
+  .tt-cal-dots { max-width: 3.2em; gap: 2px; }
+  .tt-cal-wk-head, .tt-cal-wd-head { font-size: var(--font-ui-smaller); }
+}
+@container (max-width: 200px) {
+  .tt-cal-cell { padding: 1px 0; }
+  .tt-cal-nav, .tt-cal-today { padding: 2px 4px; }
+  .tt-cal-month, .tt-cal-year { font-size: 1em; }
+}
+.tt-cal-cell {
+  text-align: center; padding: 4px 2px; border-radius: 4px; font-size: var(--font-ui-smaller);
+}
+.tt-cal-wk-head, .tt-cal-wd-head { color: var(--text-muted); font-weight: 600; }
+.tt-cal-wk { color: var(--text-faint); cursor: pointer; }
+.tt-cal-wk:hover { background: var(--background-modifier-hover); }
+.tt-cal-day { cursor: pointer; }
+.tt-cal-day:hover { background: var(--background-modifier-hover); }
+/*
+ * 两种高亮的语义区分（用户要求）：
+ *   is-today  = 今天 → 只留边框，不全填充
+ *   is-picked = 当前打开的笔记所在日期 → 全填充
+ * 之前正好反了：今天被全填充，而「打开的笔记」只有一条描边，
+ * 于是高亮看起来永远锁死在今天。
+ */
+.tt-cal-day.is-today { outline: 1px solid var(--interactive-accent); outline-offset: -1px; }
+.tt-cal-day.is-picked { background: var(--interactive-accent); color: var(--text-on-accent); }
+/* 上下月的日期照样显示成灰字，凑满整行 —— 之前是隐藏，看起来像缺一块 */
+.tt-cal-day.is-outside { color: var(--text-faint); opacity: 0.55; }
+/*
+ * 圆点：横向排列，一行最多 5 个，超出换行（最多两行 10 个）。
+ * 容器宽度 = 5 个点 + 间距，靠 flex-wrap 自然折行。
+ */
+.tt-cal-dots {
+  display: flex; flex-wrap: wrap; justify-content: center;
+  /*
+   * width 必须跟着格子走（100%），max-width 才限制一行 5 个点。
+   * 之前写死 5.2em，格子被这个固定宽度撑住，minmax 也收缩不下去。
+   */
+  width: 100%; max-width: 5.2em;
+  margin: 1px auto 0; gap: 3px;
+}
+.tt-cal-dot {
+  flex: 0 0 auto;
+  width: 4px; height: 4px; border-radius: 50%;
+}
+/* 实心 = 已写满的整点 */
+.tt-cal-dot.is-solid { background: var(--text-muted); }
+/* 空心 = 正在写的那一点（未达每点字数） */
+.tt-cal-dot.is-hollow {
+  background: transparent;
+  border: 1px solid var(--text-muted);
+  box-sizing: border-box;
+}
+/*
+ * 圆点在全填充格子上要反色才看得见。
+ * hollow 保留透明底（透出 accent 背景）只换边框色，
+ * 这样「实心点 / 空心圈」的区分在高亮格上依然成立。
+ */
+
+/* ---- 农历（取代圆点，与圆点互斥） ----
+ * 字号必须比日期数字小一档，否则格子撑不住两行。
+ */
+.tt-cal-lunar {
+  width: 100%;
+  margin: 0 auto;
+  font-size: 0.72em;
+  line-height: 1.1;
+  color: var(--text-faint);
+  /* 与圆点同样用 100% 宽度 + 居中，保证格子能被压缩 */
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+}
+/*
+ * 有笔记：农历旁一个小点。
+ * 用 ::after 而不另建元素 —— 农历模式本就是为了省渲染，
+ * 每格少一个 DOM 节点，42 格累积下来是可观的。
+ */
+.tt-cal-lunar.has-note::after {
+  content: '';
+  display: inline-block;
+  width: 3px; height: 3px;
+  margin-left: 3px;
+  vertical-align: middle;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+/* 高亮格上农历要能看清 */
+.tt-cal-day.is-picked .tt-cal-lunar,
+.tt-cal-wk.is-picked .tt-cal-lunar { color: var(--text-on-accent); }
+.tt-cal-day.is-picked .tt-cal-lunar.has-note::after,
+.tt-cal-wk.is-picked .tt-cal-lunar.has-note::after { background: var(--text-on-accent); }
+.tt-cal-day.is-picked .tt-cal-dot.is-solid { background: var(--text-on-accent); }
+.tt-cal-day.is-picked .tt-cal-dot.is-hollow { border-color: var(--text-on-accent); }
+/* 周数列的圆点稍淡，避免抢日期格的视觉重点 */
+.tt-cal-wk .tt-cal-dot.is-solid { background: var(--text-faint); }
+.tt-cal-wk .tt-cal-dot.is-hollow { border-color: var(--text-faint); }
+/*
+ * 打开周记时：周数格全填充，该行日期格用弱高亮（只加淡背景 + 圆角），
+ * 与「打开日记」那天的全填充区分开 —— 否则两种语义撞车，
+ * 切换周记时看着就像高亮在乱蹦。
+ */
+.tt-cal-wk.is-picked { background: var(--interactive-accent); color: var(--text-on-accent); }
+.tt-cal-wk.is-picked .tt-cal-dot.is-solid { background: var(--text-on-accent); }
+.tt-cal-wk.is-picked .tt-cal-dot.is-hollow { border-color: var(--text-on-accent); }
+.tt-cal-day.is-week-row {
+  background: var(--background-modifier-hover);
+  box-shadow: inset 0 0 0 1px var(--interactive-accent-hover);
+}
+/* 月记 / 年记打开时高亮对应标题，不用全填充（那会盖住文字） */
+.tt-cal-month.is-picked, .tt-cal-year.is-picked {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+  border-radius: 4px; padding: 0 4px;
+}
+/* 兜底：只有 has-note 但还没读到字数时，至少画一个点 */
+.tt-cal-day.has-note:not(.has-words):not(:has(.tt-cal-dot))::after {
+  content: ''; display: block; width: 4px; height: 4px; margin: 2px auto 0;
+  border-radius: 50%; background: var(--text-muted);
+}
+
+/* ---- 设置页分区 ---- */
+.tt-cal-section {
+  margin: 18px 0 8px; font-weight: 600; font-size: var(--font-ui-normal);
+  border-bottom: 1px solid var(--background-modifier-border); padding-bottom: 4px;
+}
+.tt-cal-sub {
+  margin: 12px 0 6px; font-weight: 600; color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+.tt-note-kind-title {
+  margin: 14px 0 4px; font-weight: 600; color: var(--text-accent);
+}
+.tt-note-status {
+  padding: 6px 10px; margin-bottom: 10px; border-radius: 6px;
+  font-size: var(--font-ui-smaller); background: var(--background-modifier-border);
+  word-break: break-all;
+}
+.tt-note-status.is-warn { color: var(--text-warning); }
+
+/* DataView 联动状态行：照 tt-note-status 的观感，未装插件时黄字提示 */
+.tt-dv-status {
+  padding: 6px 10px; margin: 0 0 10px; border-radius: 6px;
+  font-size: var(--font-ui-smaller); background: var(--background-modifier-border);
+  color: var(--text-muted);
+}
+.tt-dv-status.is-warn { color: var(--text-warning); }
+
+/* ---- 日期格式示例预览（对齐核心「日记」插件的实时示例） ---- */
+.tt-note-preview {
+  margin: 2px 0 10px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  font-family: var(--font-monospace);
+  word-break: break-all;
+}
+
+
+/* ---- 恢复默认设置（各设置区末尾）---- */
+.tt-reset-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: 20px 0 6px; padding-top: 12px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+.tt-reset-hint { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.tt-reset-btn {
+  flex-shrink: 0; cursor: pointer; border-radius: 6px; padding: 5px 12px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary); color: var(--text-normal);
+}
+.tt-reset-btn:hover { background: var(--background-modifier-hover); }
+.tt-reset-confirm { display: flex; gap: 8px; justify-content: flex-end; margin-top: 14px; }
+
+/*
+ * 确认弹窗正文：内容是带换行的纯文本，
+ * 不设 pre-line 的话换行会被 HTML 折叠成一行，后果清单全糊在一起。
+ */
+.tt-confirm-content { white-space: pre-line; }
+
+/* ---- 会话记录总开关 ---- */
+/*
+ * 与上方内容拉开距离并加分隔线：它是会关掉一整块功能的开关，
+ * 紧贴着上一项容易在连点时误触（真正的防误触是关闭前的二次确认）。
+ */
+.pomo-record-master {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+/* ---- 折叠区：总开关关闭时收起记录设置 ---- */
+.pomo-fold { margin: 8px 0 0; }
+.pomo-fold > summary {
+  cursor: pointer;
+  padding: 4px 0;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.pomo-fold > summary:hover { color: var(--text-normal); }
+
+/* ---- 时间转换：总开关关闭时的折叠区（与番茄钟记录区同一套观感） ---- */
+.tsi-fold { margin: 8px 0 0; }
+.tsi-fold > summary {
+  cursor: pointer;
+  padding: 4px 0;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.tsi-fold > summary:hover { color: var(--text-normal); }
+
+/* ---- 内置模板变量说明（仅开启降级时显示） ---- */
+.tt-note-varhelp {
+  margin: 8px 0 14px;
+  padding: 10px 12px;
+  border-radius: 6px;
+  background: var(--background-secondary);
+  border-left: 3px solid var(--text-accent);
+}
+.tt-note-varhelp-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+.tt-note-varhelp-body {
+  font-family: var(--font-monospace);
+  font-size: 0.9em;
+  color: var(--text-accent);
+  word-break: break-all;
+  margin-bottom: 6px;
+}
+.tt-note-varhelp-note {
+  font-size: 0.9em;
+  color: var(--text-muted);
+}
+
+/* ============================================================
+ * 独立窗口「无边框」（设置 → 番茄钟 → 独立窗口 → 无边框）
+ *
+ * 只作用于 .is-popout-window：主窗口一律不受影响。
+ * 这里隐藏的是 Obsidian 画在窗口**内部**的界面（标签栏 / 状态栏 / 侧边栏），
+ * 让番茄钟铺满内容区。
+ *
+ * ★ 系统标题栏（最小化 / 关闭那一条）去不掉 ——
+ *   它由系统绘制，Electron 只能在 new BrowserWindow() 时决定是否要它，
+ *   插件改不了已存在的窗口。这是硬边界，不要试图在这里"修复"。
+ * ★ 隐藏标签栏后，窗口内的「放回主窗口」按钮也会一起消失，
+ *   要关窗口请用系统标题栏的 ×。
+ * ============================================================ */
+.is-popout-window.pomo-win-borderless .workspace-tab-header-container,
+.is-popout-window.pomo-win-borderless .status-bar,
+.is-popout-window.pomo-win-borderless .workspace-ribbon,
+.is-popout-window.pomo-win-borderless .mod-left-split,
+.is-popout-window.pomo-win-borderless .mod-right-split {
+  display: none !important;
+}
+/* 标签栏隐藏后上面会留一条空白，一并收掉 */
+.is-popout-window.pomo-win-borderless .workspace-tabs {
+  padding-top: 0 !important;
+}
+/* 内容区贴边：番茄钟自己有内边距，这里不要再加一层 */
+.is-popout-window.pomo-win-borderless .view-content,
+.is-popout-window.pomo-win-borderless .workspace-leaf-content {
+  padding: 0 !important;
+}

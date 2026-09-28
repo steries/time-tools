@@ -1,0 +1,364 @@
+/*
+ * 插件主入口
+ *
+ * 一个插件、两个模块：时间戳插入器 + 番茄钟。
+ * 两个模块共用插件身份与 data.json，各自读写自己的配置分组，设置页内以标签切换。
+ */
+
+const obsidian = require('obsidian');
+const { migrateSettings, TimeToolsSettingTab } = require('./settings.js');
+const {
+  registerTimestamp,
+  refreshTimestampViews,
+  clearUndo,
+} = require('./timestamp.js');
+const { registerPomodoro, refreshPomodoroViews } = require('./pomodoro.js');
+const {
+  CAL_VIEW_TYPE,
+  CalendarNoteView,
+  attachCalendarEnhance,
+  openOwnCalendar,
+  closeOwnCalendar,
+  isCalendarOpen,
+  registerCalendar,
+  registerTemplaterBridge,
+  runNoteRenameFlow,
+} = require('./calendar.js');
+const { registerConfigIO } = require('./configio.js');
+const { isPopoutWindow, applyPopoutWindowSoon } = require('./pomowin.js');
+/* 界面语言：零依赖模块，必须早于 settings.js（其默认值含 uiLang） */
+const { setLang } = require('./i18n.js');
+
+/*
+ * 模块注册统一入口 —— 新增模块的唯一接入方式。
+ *
+ * 自带 try/catch + 用户可见提示：任一模块抛错都被就地兜住，
+ * 既不会中断 onload，也不会拖垮其余模块（安全红线）。
+ * 新增模块只需写 registerModule({ name, register })，
+ * 不必再抄一遍 try/catch + console.error + Notice 这堆样板。
+ *
+ * register() 里只写正常逻辑，抛错由这里统一兜住。
+ */
+function registerModule(spec) {
+  try {
+    spec.register();
+    return true;
+  } catch (e) {
+    console.error('[Time Tools] ' + spec.name + '模块注册失败', e);
+    try {
+      new obsidian.Notice(
+        'Time Tools：' + spec.name + '模块加载失败，其余功能不受影响'
+      );
+    } catch (_) {
+      /* Notice 不可用时不得二次抛错，否则 onload 会中断 */
+    }
+    return false;
+  }
+}
+
+class TimeToolsPlugin extends obsidian.Plugin {
+  async onload() {
+    await this.loadSettings();
+    /* 界面语言必须在读完设置后立刻应用：否则存了却没生效，表现为重启后仍是中文 */
+    setLang(this.settings.uiLang);
+
+    /*
+     * 四个模块各自走 registerModule：任一模块出错被就地兜住，
+     * 既不中断 onload（否则设置页也不注册，用户会以为插件没装上，
+     * 控制台只有一行看不懂的报错），也不影响其余模块。
+     */
+    registerModule({ name: '时间戳', register: () => registerTimestamp(this) });
+    registerModule({ name: '番茄钟', register: () => registerPomodoro(this) });
+    // 模块四：日历（修复 Calendar 设置页空白）
+    registerModule({ name: '日历', register: () => registerCalendar(this) });
+    /*
+     * Templater 桥接：三个日历开关都关掉、用 Calendar 原生功能时，
+     * Calendar 走核心「日记」插件的模板通道，模板被原样复制、<% %> 不执行。
+     * 这里监听新建文件补跑一次 Templater，与那三个开关无关，故独立注册。
+     */
+    registerModule({
+      name: 'Templater 桥接',
+      register: () => registerTemplaterBridge(this),
+    });
+    /*
+     * 配置备份：管的是全部模块的设置，不属于任一功能域，故独立成模块。
+     * 也不受「时间戳总开关」门控 —— 关了时间戳照样要能备份。
+     */
+    registerModule({ name: '配置备份', register: () => registerConfigIO(this) });
+
+    // 模块五：time tools 日历视图 + Calendar 增强（均为可选功能，默认关）
+    try {
+      this.registerView(CAL_VIEW_TYPE, (leaf) => new CalendarNoteView(leaf, this));
+      /*
+       * 用 checkCallback 而非 callback：
+       * 总开关关闭时命令直接从面板消失，而不是点了才报错。
+       */
+      this.addCommand({
+        id: 'time-tools-calendar-open',
+        name: '打开日历（可生成日/周/月/年记）',
+        checkCallback: (checking) => {
+          const c = this.settings.calendar;
+          const on = !!c && c.ownCalendarEnabled === true
+            // 未允许双开时，增强开着则命令直接隐藏（与 openOwnCalendar 一致）
+            && (c.allowBoth === true
+              || (c.enhanceCalendarEnabled !== true && c.nativeDayWeek !== true));
+          if (!on) return false;
+          if (!checking) openOwnCalendar(this);
+          return true;
+        },
+      });
+      // 关闭命令：视图曾只能靠禁用插件退出，这里补一条明确退路
+      this.addCommand({
+        id: 'time-tools-calendar-close',
+        name: '关闭日历',
+        checkCallback: (checking) => {
+          if (!isCalendarOpen(this)) return false;
+          if (!checking) {
+            const ok = closeOwnCalendar(this);
+            if (!ok) new obsidian.Notice('日历视图当前未打开');
+          }
+          return true;
+        },
+      });
+      attachCalendarEnhance(this);
+
+      /*
+       * 批量改名：把老命名（如 2026-09-22-周二）统一成当前「日期格式」。
+       * 单独注册、不依赖任何日历开关 —— 命名分裂的人恰恰没开日历。
+       */
+      this.addCommand({
+        id: 'time-tools-notes-rename',
+        name: '笔记：把已有笔记改名成当前日期格式（先预览）',
+        callback: () => runNoteRenameFlow(this),
+      });
+    } catch (e) {
+      console.error('[Time Tools] time tools 日历注册失败', e);
+    }
+
+    // 统一设置页（内部按标签切换两个模块）
+    try {
+      this.settingTab = new TimeToolsSettingTab(this.app, this);
+      this.addSettingTab(this.settingTab);
+    } catch (e) {
+      console.error('[Time Tools] 设置页注册失败', e);
+    }
+
+    /*
+     * 工作区操作一律延后到布局就绪之后。
+     *
+     * 在 onload 里同步跑 refreshXxxViews（内含 detachLeavesOfType）会赶在
+     * Obsidian 初始化其他插件之前增删 leaf，干扰其启动，表现为别的插件界面异常
+     * （与 Calendar 的冲突即由此而来）。官方也要求这类操作等到 onLayoutReady。
+     * 而此时 Obsidian 还在初始化其他插件 ——
+     * 在工作区未就绪时增删 leaf，会干扰其他插件的启动，
+     * 表现为别的插件界面异常（与 Calendar 的冲突即由此而来）。
+     * Obsidian 官方也要求这类操作等到 onLayoutReady。
+     */
+    const refreshViews = () => {
+      try {
+        refreshTimestampViews(this);
+        refreshPomodoroViews(this);
+      } catch (e) {
+        console.error('[Time Tools] 视图刷新失败', e);
+      }
+    };
+    // 正常走 onLayoutReady；万一环境没这个 API 就直接执行，不能卡住启动
+    if (typeof this.app.workspace.onLayoutReady === 'function') {
+      this.app.workspace.onLayoutReady(refreshViews);
+    } else {
+      refreshViews();
+    }
+  }
+
+  onunload() {
+    /*
+     * 卸载路径必须全程不抛错：一旦抛出，Obsidian 的插件关闭流程会中断，
+     * 后面要卸载的插件就得不到清理 —— 这正是「禁用本插件后
+     * 其他插件反而异常」的典型成因。
+     */
+    try {
+      // 同时清理新旧两种视图类型：v2.0.0 起视图类型加了 time-tools- 前缀，
+      // 只清新的会让旧版遗留的 leaf 变成「插件已不再活动」的空面板。
+      ['timestamp-inserter-view', 'time-tools-timestamp-view'].forEach((t) =>
+        this.app.workspace.detachLeavesOfType(t)
+      );
+      ['pomodoro-timer-view', 'time-tools-pomodoro-view'].forEach((t) =>
+        this.app.workspace.detachLeavesOfType(t)
+      );
+      this.app.workspace.detachLeavesOfType(CAL_VIEW_TYPE);
+      if (this.pomodoro) this.pomodoro.destroy();
+      // 撤回记录只在内存，卸载时清空，确保不残留
+      clearUndo(this);
+    } catch (e) {
+      console.error('[Time Tools] 卸载清理失败', e);
+    }
+  }
+
+  /**
+   * 载入并迁移配置。
+   * 只在**结构真的变了**时才回写，避免每次启动都写 data.json ——
+   * 启动时写盘会与同时初始化的其他插件争抢配置 IO。
+   */
+  async loadSettings() {
+    const raw = await this.loadData();
+    this.settings = migrateSettings(raw);
+    const before = JSON.stringify(raw || {});
+    const after = JSON.stringify(this.settings);
+    if (before !== after) await this.saveData(this.settings);
+  }
+
+  /**
+   * 配置被**别的窗口**改动后自动跟进。
+   *
+   * 为什么需要：每个窗口各自持有一份 settings 副本，在主窗口改了窗口尺寸或
+   * 置顶，独立窗口那份仍是加载时的旧值 —— 否则只能手动跑「重新应用」命令。
+   *
+   * 用 Obsidian 的 onExternalSettingsChange 回调，不新增任何定时器（安全红线）。
+   * 只重载配置 + 重应用窗口属性，不做别的，全程兜错。
+   */
+  async onExternalSettingsChange() {
+    try {
+      const raw = await this.loadData();
+      if (raw) this.settings = migrateSettings(raw);
+      // 只有独立窗口才需要重应用：主窗口改的就是自己这份，本来就是新的
+      if (isPopoutWindow()) applyPopoutWindowSoon(this.settings.pomodoro);
+      refreshPomodoroViews(this);
+    } catch (e) {
+      console.warn('[Time Tools] 跟进外部配置变更失败', e);
+    }
+  }
+
+  /** 任一模块改配置都整体落盘，避免互相覆盖 */
+  async saveSettings() {
+    await this.saveData(this.settings);
+    refreshTimestampViews(this);
+    refreshPomodoroViews(this);
+  }
+
+  /**
+   * 重绘设置页（设置项影响显示内容时使用）。
+   *
+   * 设置页没显示时不重绘 —— 重建一整页 DOM 只为等下再被丢掉，纯白干活，
+   * 而且重建后还要靠滚动恢复机制把位置找回来。
+   * containerEl 不存在（测试里的假对象）时按原样重绘，不改变旧行为。
+   */
+  redrawSettingsTab() {
+    const tab = this.settingTab;
+    if (!tab) return;
+    if (tab.containerEl && tab.containerEl.isConnected === false) return;
+    tab.display();
+  }
+
+  /**
+   * 打开本插件设置页并停在指定标签（浮窗齿轮、命令面板等入口都走这里）。
+   *
+   * setting.open() 在较新版本返回 Promise，必须等它 resolve 之后再切 tab ——
+   * 否则两个动作撞车，表现为「有时候点齿轮没反应」。
+   * openTabById 不是所有版本都有，故补一条 openTab 兜底。
+   */
+  openSettings(tab) {
+    const setting = this.app.setting;
+    if (!setting) return;
+    // 先记下目标标签：Obsidian 稍后调 display() 时会读它
+    if (this.settingTab && typeof this.settingTab.focusTab === 'function') {
+      this.settingTab.focusTab(tab);
+    }
+
+    const activate = () => {
+      const s = this.app.setting;
+      if (!s) return;
+      if (typeof s.open === 'function') s.open();
+      if (!this.settingTab) return;
+      // 已经停在我们这一页就别再切，省一次重绘
+      if (s.activeTab === this.settingTab) return;
+      if (typeof s.openTabById === 'function' && this.manifest) {
+        s.openTabById(this.manifest.id);
+        return;
+      }
+      // 老版本没有 openTabById，退回按 tab 对象切换
+      if (typeof s.openTab === 'function') {
+        s.openTab(this.settingTab);
+        return;
+      }
+      if (typeof this.settingTab.display === 'function') this.settingTab.display();
+    };
+
+    let opening = null;
+    try {
+      opening = setting.open();
+    } catch (e) {
+      opening = null;
+    }
+    // open() 返回 Promise 时等它完成；失败也照样走 activate
+    if (opening && typeof opening.then === 'function') {
+      opening.then(activate, activate);
+    } else {
+      activate();
+    }
+    // 兜底再来一次：老版本切 tab 是异步的，第一遍可能还没挂上
+    setTimeout(activate, 60);
+  }
+
+  /* ---------------- 以下为时间戳模块所需的方法 ---------------- */
+
+  /** 按 moment 格式串格式化当前时间，格式非法时降级为提示文案 */
+  formatWith(format) {
+    try {
+      return obsidian.moment().format(format);
+    } catch (e) {
+      return '格式无效';
+    }
+  }
+
+  formatNow() {
+    return this.formatWith(this.settings.timestamp.format);
+  }
+
+  /** 在光标处插入时间戳；有选区时替换选区 */
+  insertIntoEditor(editor) {
+    if (!editor) {
+      new obsidian.Notice('没有正在编辑的笔记');
+      return;
+    }
+    const text = this.formatNow() + (this.settings.timestamp.insertNewline ? '\n' : '');
+    editor.replaceSelection(text);
+  }
+
+  /** 取当前活动编辑器：优先 activeEditor，回退 MarkdownView */
+  insertTimestamp() {
+    const editor = this.getActiveEditor();
+    if (!editor) {
+      new obsidian.Notice('请先打开一个笔记，再把光标放到要插入的位置');
+      return;
+    }
+    this.insertIntoEditor(editor);
+  }
+
+  getActiveEditor() {
+    const active = this.app.workspace.activeEditor;
+    if (active && active.editor) return active.editor;
+    const mdView = this.app.workspace.getActiveViewOfType(obsidian.MarkdownView);
+    if (mdView && mdView.editor) return mdView.editor;
+    return null;
+  }
+
+  async activateTimestampView() {
+    const { workspace } = this.app;
+    let leaf = workspace.getLeavesOfType('timestamp-inserter-view')[0];
+    if (!leaf) {
+      leaf = workspace.getRightLeaf(false);
+      if (!leaf) return;
+      await leaf.setViewState({ type: 'timestamp-inserter-view', active: true });
+    }
+    workspace.revealLeaf(leaf);
+  }
+}
+
+module.exports = TimeToolsPlugin;
+// 测试钩子：让回归测试能直接对构建产物验证弹窗行为
+module.exports.__testModals = require('./pomodoro.js').__testModals;
+module.exports.__testFloatUI = require('./pomodoro.js').__testFloatUI;
+// 测试钩子：会话记录总开关的渲染与闸门，_test/recording.js 直接对产物做回归
+module.exports.__testRecord = require('./pomodoro.js');
+// 测试钩子：记录模板渲染（默认模板必须跟随「记录到秒」开关）
+module.exports.__testRenderTemplate = require('./recorder.js').renderTemplate;

@@ -1,0 +1,133 @@
+# 开发维护说明
+
+给接手的人（和 AI）看的仓库级约定。**插件功能与用法见 `README.md`，
+代码结构见 `ARCHITECTURE.md`。**
+
+> **仓库根 = 插件目录本身**。`main.js` / `manifest.json` / `styles.css` 就在根目录，
+> 克隆下来即是一个可直接放进 `.obsidian/plugins/` 的插件。这也是 Obsidian 社区插件仓库的惯例。
+
+---
+
+## 1. `node_modules/` 必须提交 —— 它不是 npm 依赖
+
+这是本仓库**最容易踩、后果最严重**的一条。
+
+里面是**手写测试 mock**，共约 10.6KB：
+
+| 文件 | 大小 |
+|---|---|
+| `node_modules/obsidian/index.js` | 9031 字节 |
+| `node_modules/@codemirror/state/index.js` | 541 字节 |
+| `node_modules/@codemirror/view/index.js` | 1078 字节 |
+
+`obsidian/index.js` 首行写明：
+`/* 测试用的 obsidian mock（仅用于 Node 冒烟测试，不进插件包） */`。
+
+**依赖范围（实测）**：
+
+- 13 个 `_test/*.js` 里 `require('obsidian')`
+- 2 个 `_test/*.js` 里 `require('@codemirror/...')`
+- 多个 `src/*.js`（`calendar` `configio` `i18n` `main` `note` …）
+
+### 为什么不能忽略
+
+已实测反证：把 `src/`、`_test/`、`_run_tests.sh` 复制到新目录、**不复制 `node_modules`**，
+跑 `node _test/i18n.js`：
+
+```
+node:internal/modules/cjs/loader:1210
+  throw err;
+  ^
+MODULE_NOT_FOUND
+exit=1
+```
+
+一旦被 `.gitignore` 忽略，克隆后 **49 个测试套件全部 `MODULE_NOT_FOUND`**，
+而且 `npm install` 救不回来 —— 本工程**没有 `package.json`**，
+这三个包在 npm 上也不是这个内容。
+
+> 99% 的 `.gitignore` 模板都会写 `node_modules/`。本仓库**不能写**，
+> `.gitignore` 里已用注释显式锁死这一条。
+
+### 连带：不要新增 `package.json`
+
+现在没有反而是安全的。一旦有了它，将来有人跑 `npm install`
+可能覆盖或清理 `node_modules` 里的手写 mock。
+
+---
+
+## 2. 提交前跑全量测试
+
+```bash
+bash _run_tests.sh
+# 期望：合计：套件 通过 49 / 失败 0（共 49 个）；退出码 0
+```
+
+配好钩子可让每次提交自动跑（仓库根执行一次即可）：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`.githooks/pre-commit` 会跑 `_run_tests.sh`，任一套件失败即拒绝提交。
+紧急绕过：`git commit --no-verify`（仅限确认无误时）。
+
+---
+
+## 3. 入库 / 不入库清单
+
+| 路径 | 是否入库 | 理由 |
+|---|---|---|
+| `node_modules/` | ✅ **必须** | 见 §1，手写测试 mock |
+| `main.js` | ✅ 入库 | Obsidian 安装只认 `main.js` / `manifest.json` / `styles.css` 三件；单人维护无 CI，入库最省事 |
+| `src/*`、`_test/*`、`build.js` | ✅ 入库 | 源码与测试 |
+| `ARCHITECTURE.md` / `README.md` / `LICENSE` | ✅ 入库 | 文档与署名 |
+| `.gitignore` / `DEVELOPING.md` / `.githooks/` | ✅ 入库 | 仓库约定 |
+| `*.zip` | ❌ 忽略 | 交付包每次内容都变；可由 `node build.js` 重建 |
+| `__pycache__/`、`*.pyc` | ❌ 忽略 | Python 缓存 |
+| `.DS_Store` / `Thumbs.db` / `*.swp` / `*~` / `*.log` | ❌ 忽略 | 编辑器与系统垃圾 |
+
+> 交付包由仓库外（工作区层）的打包脚本生成，本体不在本仓库内，故 `.gitignore`
+> 只需挡住误放进来的 zip。
+
+---
+
+## 4. 常用命令
+
+```bash
+# 构建（产物 ./main.js）
+node build.js
+
+# 全量测试
+bash _run_tests.sh
+
+# 文档与代码一致性校验（ARCHITECTURE.md 里的数字/命令清单是否与源码对得上）
+node _test/arch-doc.js
+
+# 源文件健康度
+node _test/srchealth.js
+```
+
+---
+
+## 5. 改完代码/文档后必须同步
+
+- 改了源码 → 跑 `node build.js` + `bash _run_tests.sh` + `node _test/arch-doc.js`
+- 改了 `ARCHITECTURE.md` 或 `README.md` → 它们是**交付包的一部分**，需重新打包
+- 新增了测试套件 → 必须登记进开发启动卡的 §1 套件表
+  （历史上 `manualdoc`、`i18nguard` 都曾漏登，导致照卡还原会丢文件）
+
+---
+
+## 6. 路径红线：`normalizePath()`
+
+所有**用户可填的路径**与**代码拼接出来的路径**，在交给 vault API 之前必须过
+`normalizePath()`。这是 Obsidian 官方列出的**审核最高频退回原因**。
+
+用户可填的路径类设置：`statsCustomPath`、四种周期笔记 `folder`、内置写入 `folder`、
+`template`、`soundFolder`。用户从文件管理器复制路径，带尾斜杠 / 反斜杠是常态。
+
+**归一化放在入口**（路径从设置读出或拼接出来的那一刻），不要在调用点各写一遍 ——
+会漏，是典型漂移源。**空串不要 normalize**：`''` 表示「库根目录」，这个语义必须保住。
+
+详见 `ARCHITECTURE.md` §10.7。

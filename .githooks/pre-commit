@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# pre-commit 钩子：提交前跑全量测试，任一套件失败就拒绝提交。
+#
+# 启用（在本工程根目录执行一次即可）：
+#   git config core.hooksPath .githooks
+#
+# 绕过（仅限确认无误时）：git commit --no-verify
+
+# 为什么用 bash <脚本> 而不是 exec <脚本>：
+# Windows 上 Git 的 core.fileMode 默认为 false，
+# 所有文件都会被记成 100644（没有执行位），
+# 直接 exec 会 Permission denied。
+# 经解释器调用不需要执行位，Linux / Mac 上同样有效。
+root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 1
+cd "$root" || exit 1
+bash ./_run_tests.sh
