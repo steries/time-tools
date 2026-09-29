@@ -667,7 +667,7 @@ const DATE_RE = new RegExp(
   '(\\d{1,2})' + SEP + '(?:月)?' + SEP +
   // 末尾既可能是「日」也可能是「号」（5月16号 是很常见的写法）
   '(\\d{1,2})' + SEP + '(?:日|号)?' +
-  '(?:[\\sT]+(\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?$'
+  '(?:[\\sT]+(\\d{1,2})[:：](\\d{2})(?:[:：](\\d{2}))?)?$'
 );
 
 /** 紧凑纯数字：20260919 */
@@ -682,14 +682,14 @@ const COMPACT_RE = /^(\d{4})(\d{2})(\d{2})$/;
  */
 const MD_RE = new RegExp(
   '^(\\d{1,2})[\\s\-/._月]+(\\d{1,2})\\s*(?:日|号)?' +
-  '(?:[\\sT]+(\\d{1,2}):(\\d{2})(?::(\\d{2}))?)?$'
+  '(?:[\\sT]+(\\d{1,2})[:：](\\d{2})(?:[:：](\\d{2}))?)?$'
 );
 
 /** 只有日：3号 / 17号 / 十七号 —— 月由 dayOnlyMode 决定 */
 const DAY_ONLY_RE =
   /^(\d{1,2}|[零〇一二两三四五六七八九十]+)\s*(?:日|号)$/;
 
-const TIME_ONLY_RE = /^(\d{1,2}):(\d{2})(?::(\d{2}))?$/;
+const TIME_ONLY_RE = /^(\d{1,2})[:：](\d{2})(?:[:：](\d{2}))?$/;
 const UNIX_RE = /^\d{10}$|^\d{13}$/;
 /** 日记链接：[[2026-09-19]] */
 const LINK_RE = /^\[\[\s*([^\[\]]+?)\s*\]\]$/;
@@ -739,14 +739,24 @@ function splitDaypart(text) {
  * （「明年12月份的第49周周三**下午**2点」剥掉时刻后剩「…周三下午」），
  * 必须按尾部匹配，否则整条解析失败。
  */
+/*
+ * 时段词的**全部字面写法**：key 与 re 里的别名都要收。
+ * 只收 key 时「周五上午10点」剥不掉「上午」，整条判失败
+ * （「上午」是「早上」的别名，不在 key 里）。
+ * 不用 alias —— 那里有单字（午/早/晚），有歧义，会误命中。
+ */
 const DAYPART_TAIL_RE = new RegExp(
-  '(' + TIME_OF_DAY.map((t) => t.key).join('|') + ')$'
+  '(' + TIME_OF_DAY
+    .flatMap((t) => t.re.source.replace(/^\^/, '').split('|^'))
+    .join('|') + ')$'
 );
 function splitDaypartTail(text) {
   const s = String(text ?? '').trim();
   const m = DAYPART_TAIL_RE.exec(s);
   if (!m) return null;
-  const t = TIME_OF_DAY.find((x) => x.key === m[1]);
+  const t = TIME_OF_DAY.find(
+    (x) => x.re.source.replace(/^\^/, '').split('|^').includes(m[1])
+  );
   return { key: t ? t.key : m[1], rest: s.slice(0, m.index) };
 }
 
@@ -1343,11 +1353,11 @@ function stripWeekdayOnly(text) {
 
 /** 文本里是否含「时:分」（可能带秒） */
 function hasClock(text) {
-  return /\d{1,2}:\d{2}(?::\d{2})?/.test(String(text ?? ''));
+  return /\d{1,2}[:：]\d{2}(?:[:：]\d{2})?/.test(String(text ?? ''));
 }
 /** 文本里的时钟部分是否写了秒 */
 function hasSeconds(text) {
-  return /\d{1,2}:\d{2}:\d{2}/.test(String(text ?? ''));
+  return /\d{1,2}[:：]\d{2}[:：]\d{2}/.test(String(text ?? ''));
 }
 /** 文本里是否含四位年份 */
 function hasYear(text) {
@@ -1552,7 +1562,7 @@ function parseComposite(text, base, settings) {
 
   const now = base ? new Date(base.getTime()) : new Date();
   let year = null, month = null, week = null, wd = null, day = null;
-  let daypart = null, clock = null, monthEdgeFlag = null;
+  let daypart = null, clock = null, monthEdgeFlag = null, wo = 0;
   let hit = false;
 
   // ---- 1) 尾部时刻：2点 / 7点半 / 14:30 ----
@@ -1582,10 +1592,20 @@ function parseComposite(text, base, settings) {
 
   // ---- 3) 尾部星期几：周三 / 星期五 / 礼拜三 ----
   s = stripParticle(s);
-  m = /(?:周|星期|礼拜)\s*([一二三四五六日天1-7])$/.exec(s);
+  /*
+   * 必须带上/下/本/这前缀：「下周三下午2点」剥掉时刻与时段后剩「下周三」，
+   * 只吃「周三」会留下一个「下」→ 走到 leftover 检查整条判 null。
+   * WEEKDAY_RE 本来就是带前缀的，这里是同一文件里的不一致。
+   */
+  m = /(上上|下下|本|这|上|下)?\s*(?:周|星期|礼拜)\s*([一二三四五六日天1-7])$/.exec(s);
   if (m) {
-    wd = WD_CHAR[m[1]] || (/^[1-7]$/.test(m[1]) ? Number(m[1]) : null);
-    if (wd) { s = s.slice(0, m.index); hit = true; }
+    const ch = m[2];
+    wd = WD_CHAR[ch] || (/^[1-7]$/.test(ch) ? Number(ch) : null);
+    if (wd) {
+      wo = m[1] === '上上' ? -2 : m[1] === '下下' ? 2
+         : m[1] === '上' ? -1 : m[1] === '下' ? 1 : 0;
+      s = s.slice(0, m.index); hit = true;
+    }
   }
 
   /*
@@ -1647,22 +1667,37 @@ function parseComposite(text, base, settings) {
     if (year) { s = s.slice(0, m.index); hit = true; }
   }
 
-  // 剥完还剩内容 → 说明有无法识别的片段，整体不认
-  if (String(stripParticle(s)).replace(/[\s，,、]/g, '') !== '') return null;
+  /*
+   * 兜底：剥完时刻与时段后剩下的**整串**本身是完整日期
+   * （「2026-09-19下午3点」剥完剩「2026-09-19」）。
+   * 必须在 leftover 检查**之前**算 —— 放在之后的话 leftover 那句已经
+   * return null 了，兜底永远到不了。parseToDate 首尾锚定，
+   * 不会把碎片当日期，所以安全。
+   */
+  let fallbackDate = null;
+  if (month === null && day === null && week === null && wd === null && year === null) {
+    fallbackDate = parseToDate(String(s).trim(), settings);
+  }
+
+  // 剥完还剩内容 且 整串不是完整日期 → 整体不认
+  if (!fallbackDate && String(stripParticle(s)).replace(/[\s，,、]/g, '') !== '') return null;
   if (!hit) return null;
 
   // ---- 合成 ----
   let d;
   const y = year || now.getFullYear();
 
-  if (week && wd) {
+  if (fallbackDate) {
+    d = fallbackDate;
+  } else if (week && wd) {
     d = weekOfYearDate(y, week, wd, settings);
   } else if (week) {
     d = weekOfYearDate(y, week, 1, settings); // 只有周数取该周一
   } else if (wd) {
     // 只有星期几：在当前月份（或指定月份）内找
     const baseDate = month ? new Date(y, month - 1, 1) : new Date(now.getTime());
-    d = setWeekday(baseDate, wd, 0);
+    // 用 resolveWeekday 而非 setWeekday：前者会读 nextWeekdayMode 设置
+    d = resolveWeekday(baseDate, wd, wo, settings);
   } else if (month) {
     d = new Date(y, month - 1, day || 1);
     // 「明年12月底」：先定位到该月，再取月末/月初
@@ -4203,11 +4238,11 @@ const PICK_PATTERNS = [
   WEEKDAY_PICK_RE,
   NOW_PICK_RE,
   /\d{4}\d{2}\d{2}/,                                            // 紧凑 20260919
-  /\d{4}[-/._年]\d{1,2}[-/._月]\d{1,2}日?(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?/, // 2026-09-19
+  /\d{4}[-/._年]\d{1,2}[-/._月]\d{1,2}日?(?:\s+\d{1,2}[:：]\d{2}(?:[:：]\d{2})?)?/, // 2026-09-19
   /\d{4}[\s\-/._]\d{1,2}[\s\-/._]\d{1,2}/,                     // 2026 09 19（宽松）
   /\d{1,2}[-/._月]\d{1,2}[日号]?/,                                // 09-17 / 5月16号
   /\d{10}|\d{13}/,                                              // Unix 时间戳
-  /\d{1,2}:\d{2}(?::\d{2})?/,                                   // 14:30
+  /\d{1,2}[:：]\d{2}(?:[:：]\d{2})?/,                                   // 14:30
   /*
    * 口语相对日 + 时刻（明天5点 / 明天下午3点 / 昨天5点半）。
    * 时刻部分必须是「有点或有冒号」的实义时刻，不能全用可选量词——
@@ -4484,7 +4519,7 @@ function collectCandidates(text) {
     /[一二三四五六七八九十]{1,3}月[初一三四五六七八九十]{1,3}[日号]?/g,
     /农历[一二三四五六七八九十\d]{1,3}月[初一三四五六七八九十\d]{1,3}[日号]?/g,
     /(大后天|大前天|今天|明天|后天|昨天|前天|上周|本周|这周|下周|下下周)[一二三四五六日天1-7]?/g,
-    /\d{1,2}:\d{2}(:\d{2})?/g,
+    /\d{1,2}[:：]\d{2}([:：]\d{2})?/g,
   ];
   const out = [];
   for (let i = 0; i < pats.length; i++) {
