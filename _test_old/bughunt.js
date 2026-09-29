@@ -6,8 +6,7 @@ global.window = { setInterval: (f) => { global.__ticks.push(f); return global.__
 global.__ticks = [];
 global.__intervals = [];
 global.document = { body: new obsidian.MockEl('body'), createElement: (t) => new obsidian.MockEl(t) };
-/* Node 21+ 的 globalThis.navigator 是只读 getter，简单赋值会静默失败，必须 defineProperty（详见 _smoke_env.js 的注释） */
-Object.defineProperty(global, 'navigator', { value: { clipboard: { writeText: async () => {} } }, writable: true, configurable: true, enumerable: true });
+global.navigator = { clipboard: { writeText: async () => {} } };
 global.__modals = []; global.__notices = []; global.__settings = [];
 
 const { migrateSettings } = require(__dirname + '/../src/settings.js');

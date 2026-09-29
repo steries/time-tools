@@ -1,0 +1,621 @@
+/*
+ * 界面语言（独立模块）
+ *
+ * 定位：只管设置界面上显示给人看的那层字，不参与任何功能逻辑。
+ * 用法：t(key, 中文原文) —— 当前是简体中文时直接返回原文；是英文时查 EN 表，
+ *       查不到仍返回原文；是繁体时按字表转换。
+ *
+ * 为什么中文原文写在调用处、不另存一份 zh 包：
+ *   zh 只做兜底，存一份等于把同样的句子写两遍，改一处忘一处必然漂移。
+ *   调用处的原文就是 zh，删掉整个 i18n 后界面回到全中文，无需任何数据。
+ *
+ * 删除本模块的影响面（四处接线）：
+ *   1. build.js 的 FILES 清单里删掉 'src/i18n.js'
+ *   2. src/main.js 里删掉 setLang(this.settings.uiLang) 及其 require
+ *   3. src/settings.js：defaults() 去掉 uiLang、TABS 去掉 lang 那条、
+ *      renderInto 去掉 lang 分支、require 去掉 renderLangTab
+ *   4. 各模块里 t('xx','原文') 没有自动兜底，需用脚本还原成 '原文'
+ *      （见启动卡 §14）——否则 t 未定义会报错。
+ * 注：configio.js（配置导入导出）也引了这个模块，删时一并去掉那行 require。
+ */
+const obsidian = require('obsidian');
+
+/** 可选语言。简体中文是兜底，English 查表，繁体按字表转换。 */
+const LANGS = [
+  { code: 'zh', label: '简体中文' },
+  { code: 'zh-TW', label: '繁體中文' },
+  { code: 'en', label: 'English' },
+];
+
+/** 当前语言，默认 zh（= 底色中文，符合要求：删掉功能后是中文） */
+let current = 'auto';
+/** auto 模式下检测结果的缓存；切语言时清空，否则改了不生效 */
+let autoCache = '';
+
+/** 英文表：key → 英文。key 由中文原文取哈希生成，行号变了也不会错位。 */
+/*
+ * 英文表：key → 英文。查不到一律回落调用处的中文原文，绝不空白。
+ *
+ * 刻意不译（不要补，补了会出事）：
+ *   ka6762c3b / k72acd8fa / k1f05dd7e —— 这三处是「语法示例」
+ *   （DataView 字段写法、自设节日写法、自定义规则写法），
+ *   解析规则只认中文写法，翻成英文用户照抄反而解析失败。
+ *   守门：_test/i18nguard.js 第 3 组把三者列为白名单。
+ */
+/**
+ * 日历网格里的月份名 / 星期名。
+ *
+ * 为什么自己维护两张小表而不是走 moment locale：
+ *   Calendar 的 Override locale 会调用 moment.defineLocale —— 那是**全局**的，
+ *   会把别的插件的界面语言一起改掉（启动卡 §3 红线）。这里只改自己显示的字符。
+ *
+ * 中文是底色（保持原样），英文单独给。繁体不建第三份表 —— 走 toTW 字表转换即可。
+ */
+const MONTH_NAMES = {
+  zh: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
+  en: ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'],
+};
+
+/**
+ * 星期名。中文沿用现有单字简写（曾改成「周日/周一」全称，用户更喜欢原先的，已回退）。
+ * 英文用 Sun/Mon 简写：中文是单字，简写宽度接近，中文版式不用动（§0.2 样式原则）。
+ */
+const WEEKDAY_NAMES = {
+  zh: ['日', '一', '二', '三', '四', '五', '六'],
+  en: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+};
+
+/*
+ * 番茄钟状态名。照 MONTH_NAMES 的做法查表，而不是给 6 个状态各写一条 i18nT：
+ *   状态名只有 6 个 × 2 语言 = 12 条，查表比堆 12 条翻译清爽，也不会漏。
+ *   注意：只用于界面；写进笔记的内容一律不翻译。
+ */
+const STATE_NAMES = {
+  zh: { idle: '待开始', focus: '专注', short: '短休息', long: '长休息', paused: '已暂停', waiting: '待开始' },
+  en: { idle: 'Idle', focus: 'Focus', short: 'Short break', long: 'Long break', paused: 'Paused', waiting: 'Idle' },
+};
+
+/** 取日历显示语言：auto = 跟随已解析出的显示语言，不重新检测系统 */
+function calLang(calSetting) {
+  const v = calSetting === 'zh' || calSetting === 'en' ? calSetting : resolve();
+  return v === 'zh-TW' ? 'zh' : v;
+}
+
+const EN = require('./i18n-en.js');
+
+/*
+ * 简→繁字表。两串等长、逐字对应，用两个字符串而不是对象字面量，体积更小。
+ * 只收设置界面会用到的字，不做全字集——全字集几千字，为几句话不值得。
+ */
+const TW_FROM =
+  '时间设置开关启关闭转换识别格式显示记录统计自定节日农历阳历节气干支' +
+  '生肖标记前后提示预览插入换行命令触发词启用扩展功能点击按钮输入文本' +
+  '模板文件笔记日记周月日年秒分钟小时倒计时正计时休息专注暂停跳过重置' +
+  '轮次累计目标提醒间隔上限位置窗口悬浮侧边栏主题声音通知权限链接路径' +
+  '数据备份导入导出迁移高级选项区块账号语言界面页面类型数量大小高度宽' +
+  '度边距圆点颜色高亮今天打开新建重命名删除恢复默认应用立即保存取消确' +
+  '定返回上一步下一步完成开始结束继续状态可用未检测插件安装依赖冲突错' +
+  '误失败成功警告信息说明帮助关于版本作者仓库地址反馈问题建议其它全部' +
+  '部分仅只不无需可以需要请务必注意小心谨慎推荐优先手动自动每天每周每' +
+  '次个条行列段落字符空格符号标点数字单位毫秒时区本地全局临时永久当前';
+const TW_TO =
+  '時間設置開關啟關閉轉換識別格式顯示記錄統計自訂節日農曆陽曆節氣干支' +
+  '生肖標記前後提示預覽插入換行命令觸發詞啟用擴展功能點擊按鈕輸入文本' +
+  '模板文件筆記日記週月日年秒分鐘小時倒計時正計時休息專注暫停跳過重置' +
+  '輪次累計目標提醒間隔上限位置窗口懸浮側邊欄主題聲音通知權限鏈接路徑' +
+  '數據備份導入導出遷移高級選項區塊帳號語言界面頁面類型數量大小高度寬' +
+  '度邊距圓點顏色高亮今天打開新建重命名刪除恢復默認應用立即保存取消確' +
+  '定返回上一步下一步完成開始結束繼續狀態可用未檢測插件安裝依賴衝突錯' +
+  '誤失敗成功警告信息說明幫助關於版本作者倉庫地址反饋問題建議其它全部' +
+  '部分僅只不無需可以需要請務必注意小心謹慎推薦優先手動自動每天每周每' +
+  '次個條行列段落字符空格符號標點數字單位毫秒時區本地全局臨時永久當前';
+
+/** 词汇级差异：字表转换解决不了的词（软件→軟體），单独覆盖 */
+const TW_WORDS = [
+  ['设置', '設定'],
+  ['时区', '時區'],
+  ['信息', '資訊'],
+  ['数据', '資料'],
+  ['文件', '檔案'],
+  ['默认', '預設'],
+  ['小时', '小時'],
+  ['分钟', '分鐘'],
+  ['秒钟', '秒鐘'],
+  ['界面', '介面'],
+  ['插件', '外掛'],
+  ['链接', '連結'],
+  ['路径', '路徑'],
+  ['悬停', '懸停'],
+  ['窗口', '視窗'],
+  ['文本', '文字'],
+  ['字符', '字元'],
+  ['数字', '數字'],
+  ['宽度', '寬度'],
+  ['高亮', '醒目提示'],
+];
+
+const TW_MAP = (() => {
+  const m = new Map();
+  for (let i = 0; i < TW_FROM.length; i++) m.set(TW_FROM[i], TW_TO[i]);
+  return m;
+})();
+
+function toTW(text) {
+  let s = String(text == null ? '' : text);
+  TW_WORDS.forEach(([a, b]) => {
+    s = s.split(a).join(b);
+  });
+  let out = '';
+  for (const ch of s) out += TW_MAP.get(ch) || ch;
+  return out;
+}
+
+/*
+ * 归一化语言值。
+ * 'auto' 是默认值；未指定或不可识别的值也走 auto（跟随系统），
+ * 而不是硬回中文 —— 否则新装的用户是「跟随系统」、升级上来的用户却被钉在中文。
+ */
+function normalize(code) {
+  if (code === 'auto') return 'auto';
+  if (LANGS.some((l) => l.code === code)) return code;
+  if (EXTRA_LANGS[code]) return code; // 外部注册的语言也要放行，否则下拉能选却不生效
+  return 'auto';
+}
+
+/**
+ * 把拿到的语言字符串映射成受支持的语言码；不支持的一律回落到英文。
+ * @param {string} raw 形如 zh-cn / en-GB / zh-TW
+ */
+function matchLang(raw) {
+  const s = String(raw || '').toLowerCase();
+  if (s.indexOf('zh') === 0) return /tw|hk|hant|mo/.test(s) ? 'zh-TW' : 'zh';
+  return 'en';
+}
+
+/**
+ * 检测系统 / Obsidian 界面语言。
+ *
+ * 顺序按可靠性排：
+ *   1. localStorage 的 language —— 用户在 Obsidian 设置里选的界面语言，最准
+ *   2. moment.locale()        —— 官方推荐源，部分版本与上者不同步
+ *   3. navigator.language     —— 浏览器语言，可能与 Obsidian 界面语言无关
+ * 全程 try/catch：一处读不到就换下一处，全读不到用英文，绝不因此让插件起不来。
+ */
+function detectSystemLang() {
+  const read = (fn) => {
+    try {
+      const v = fn();
+      return typeof v === 'string' && v ? v : '';
+    } catch (e) {
+      return '';
+    }
+  };
+  const raw =
+    read(() => (typeof window === 'undefined' ? '' : window.localStorage.getItem('language'))) ||
+    read(() => (typeof obsidian.moment === 'function' ? obsidian.moment().locale() : '')) ||
+    read(() => (typeof navigator === 'undefined' ? '' : navigator.language)) ||
+    '';
+  /*
+   * 一处都读不到时返回空串，由 resolve() 回落到中文底色。
+   * 与「读到了但不支持」区分开：后者按用户要求回英文，
+   * 前者根本无从判断（无界面环境、测试环境），硬给英文反而更糟。
+   */
+  return raw ? matchLang(raw) : '';
+}
+
+/** 解析出真正生效的语言：只有 auto 才需要检测，且只检测一次。 */
+function resolve() {
+  if (current !== 'auto') return current;
+  if (!autoCache) autoCache = detectSystemLang() || 'zh';
+  return autoCache;
+}
+
+function setLang(code) {
+  current = normalize(code);
+}
+
+function getLang() {
+  return current;
+}
+
+/**
+ * 取界面文案。
+ * @param {string} key 由中文原文生成，同一句话永远是同一个 key
+ * @param {string} zh  中文原文，同时充当兜底值
+ * @param {...*}   args 替换英文串里的 {0} {1}……（中文原文本身已插值，用不到）
+ *
+ * 为什么英文串用 {0} 而不是也写 ${}：
+ *   英文串是静态数据，插值变量在调用处，两边拼不到一起；
+ *   编号占位是通行做法，且中文模式根本不进替换分支，零开销。
+ */
+function t(key, zh) {
+  const fallback = zh == null ? '' : String(zh);
+  const lang = resolve();
+  let out;
+  if (lang === 'en') {
+    const v = EN[key];
+    out = typeof v === 'string' && v ? v : fallback;
+  } else if (lang === 'zh-TW') {
+    out = toTW(fallback);
+  } else if (EXTRA_LANGS[lang]) {
+    // 放在内置分支之后：内置先命中，未注册外部语言时不给热路径添开销
+    const v = EXTRA_LANGS[lang].table[key];
+    out = typeof v === 'string' && v ? v : fallback;
+  } else {
+    out = fallback;
+  }
+  if (arguments.length > 2) {
+    for (let n = 2; n < arguments.length; n++) {
+      out = out.split('{' + (n - 2) + '}').join(String(arguments[n]));
+    }
+  }
+  return out;
+}
+
+/** 外部注册的语言表：code → { label, table }。内置之外的语言都走这里 */
+const EXTRA_LANGS = {};
+
+/**
+ * 注册一门语言 —— 给「想自己加语言」的人留的接口。
+ *
+ *   registerLang('ja', '日本語', { 'k……': '……', … })
+ *
+ * 注册后：下拉里多一项；t() 先查该表，查不到仍回落中文原文（兜底规则不变）。
+ * key 怎么来：复制调用处 i18nT('kxxx', '中文') 里的 kxxx，值是对应的外文。
+ * 内置语言（zh / zh-TW / en）不走这里 —— 改内置请直接改 LANGS 与 EN 表。
+ *
+ * @returns {boolean} 注册是否成功（code 为空、与内置冲突、table 不是对象 → false）
+ */
+function registerLang(code, label, table) {
+  if (!code || typeof code !== 'string') return false;
+  if (LANGS.some((l) => l.code === code)) return false; // 不许覆盖内置
+  if (!table || typeof table !== 'object') return false;
+  EXTRA_LANGS[code] = { label: String(label || code), table: table };
+  return true;
+}
+
+/** 下拉要列出的全部语言：内置 + 外部注册 */
+function allLangs() {
+  return LANGS.concat(
+    Object.keys(EXTRA_LANGS).map((c) => ({ code: c, label: EXTRA_LANGS[c].label }))
+  );
+}
+
+/**
+ * 语言设置区（渲染进主设置页的「界面语言」标签）。
+ *
+ * 为什么从独立设置页改成主设置页里的一个标签：
+ *   两个入口在设置列表里显示为两行 Time Tools，会被当成两套设置。
+ *   内嵌只需主设置页 renderInto 多一个分支，删掉也只删那一处。
+ */
+/*
+ * 切语言后刷新插件自己的界面。
+ * 只调 plugin 上已有的方法，绝不反向 require 番茄钟/日历模块 ——
+ * 这是「i18n 零依赖、删掉语言功能不牵连其他模块」的前提。
+ */
+function refreshPluginViews(plugin) {
+  if (!plugin) return;
+  ['refreshPomodoroViews', 'refreshCalendarViews', 'refreshTimestampViews'].forEach((n) => {
+    try {
+      if (typeof plugin[n] === 'function') plugin[n]();
+    } catch (e) {
+      console.error('[Time Tools] 刷新视图失败：' + n, e);
+    }
+  });
+}
+
+function renderLangTab(box, plugin) {
+  /*
+   * box 必须是**只给本块用的子容器**（由主设置页 createDiv 出来再传进来）。
+   * 这里第一件事就是 box.empty()，所以绝不能把主设置页的 containerEl 直接
+   * 传进来 —— 那会把顶部标签栏一起清掉，用户进了这一页就切不回别的标签了。
+   */
+  box.empty();
+  box.addClass('tt-settings');
+
+  box.createEl('h2', { text: t('lang.title', '界面语言') });
+
+  new obsidian.Setting(box)
+    .setName(t('lang.name', '显示语言'))
+    .setDesc(
+      t('lang.desc', '只影响设置界面上显示的字，不影响笔记内容、功能与数据。切换后立即重绘。')
+    )
+    .addDropdown((d) => {
+      // auto 是默认值：跟随 Obsidian 界面语言，没有对应语言时用英文
+      d.addOption('auto', t('lang.auto', '跟随系统（检测不到时用英文）'));
+      allLangs().forEach((l) => d.addOption(l.code, l.label));
+      d.setValue(getLang());
+      d.onChange(async (v) => {
+        setLang(v);
+        autoCache = '';
+        try {
+          plugin.settings.uiLang = normalize(v);
+          await plugin.saveSettings();
+        } catch (e) {
+          console.error('[Time Tools] 保存界面语言失败', e);
+        }
+        // 整页重绘，让所有标签一起换语言
+        try {
+          if (plugin.settingTab && plugin.settingTab.display) plugin.settingTab.display();
+        } catch (e) {
+          console.error('[Time Tools] 重绘主设置页失败', e);
+        }
+        /*
+         * 光重绘设置页不够：正在跑的浮窗/日历自己不会换语言 ——
+         * FloatUI 有脏检查，不主动触发就停在旧语言上，要等下次状态变化才更新。
+         */
+        refreshPluginViews(plugin);
+      });
+    });
+
+  /*
+   * 日历语言：只管日历网格里的月份名与星期名，与上面的显示语言相互独立。
+   * 有人界面用英文、日历想看中文月份，也有人反过来。
+   */
+  new obsidian.Setting(box)
+    .setName(t('lang.cal.name', '日历语言'))
+    .setDesc(
+      t(
+        'lang.cal.desc',
+        '只影响日历网格里的月份名与星期名；不影响日期格式、周起始日、笔记内容与命名。'
+      )
+    )
+    .addDropdown((d) => {
+      d.addOption('auto', t('lang.cal.auto', '跟随显示语言'));
+      d.addOption('zh', '简体中文');
+      d.addOption('en', 'English');
+      const cur = ((plugin.settings && plugin.settings.calendar) || {}).lang;
+      d.setValue(['auto', 'zh', 'en'].indexOf(cur) >= 0 ? cur : 'auto');
+      d.onChange(async (v) => {
+        try {
+          plugin.settings.calendar.lang = v;
+          await plugin.saveSettings();
+          /*
+           * 只刷日历视图，不重绘设置页（重绘会让下拉失焦）。
+           * 用 plugin 上已有的方法：i18n.js 必须保持零依赖，
+           * 不能反过来依赖日历模块（删掉语言功能时不应牵连任何模块）。
+           * 方法不存在时也不报错 —— 设置已存下，下次打开日历自然生效。
+           */
+          try {
+            if (typeof plugin.refreshCalendarViews === 'function') {
+              plugin.refreshCalendarViews();
+            }
+          } catch (e) {
+            console.error('[Time Tools] 刷新日历视图失败', e);
+          }
+        } catch (e) {
+          console.error('[Time Tools] 保存日历语言失败', e);
+        }
+      });
+    });
+
+  box.createDiv({
+    cls: 'setting-item-description',
+    text: t(
+      'lang.note',
+      '说明：简体中文为底色文案，任何未翻译的条目都显示中文；' +
+        '繁體由字表转换生成，个别词可能不地道，可切回简体。'
+    ),
+  });
+}
+
+
+/*
+ * 转换项名称与说明的英文表（按 key）。
+ * 这些文案在数据表里、以变量形式传给 setName —— 守卫扫不到那种形式，
+ * 只能查表给。中文态直接回落中文原文，零开销。
+ */
+const ACTION_EN = {
+  unify: { n: "Unify format", d: "Replace any recognised time with one consistent format (change it in settings; defaults to the same as the timestamp format)" },
+  relative: { n: "Relative time", d: "Turn dates into relative descriptions like \"3 days ago\" or \"in 2 hours\"" },
+  weekday: { n: "Add weekday", d: "Append the weekday after the date, e.g. 2026-09-19 Sat" },
+  dailyLink: { n: "Daily note link", d: "Turn into [[2026-09-19]] so it links to that day's note" },
+  unixEncode: { n: "Date to timestamp", d: "Turn a date into a 10-digit Unix timestamp" },
+  dateShift: { n: "Shift date", d: "Add or subtract days: enter +7 or -3" },
+  fillDate: { n: "Complete date", d: "Fill in this year / today when only month-day or time is written, e.g. 09-17 becomes 2026-09-17" },
+  timePart: { n: "Time only", d: "Keep only the time part, e.g. 2026-09-19 14:30:25 becomes 14:30:25" },
+  lunar: { n: "To lunar date", d: "Solar date to lunar date, e.g. \"lunar 2026-08-19\"" },
+  lunarGanzhi: { n: "Lunar + ganzhi", d: "Lunar date with the sexagenary year and zodiac, e.g. \"Bingwu year, Horse\"" },
+  solarTerm: { n: "Solar term", d: "Which of the 24 solar terms this day is; hidden when it is not one" },
+  unixDecode: { n: "Timestamp to date", d: "Turn 1768800000 into a readable date" },
+  lunarToSolar: { n: "Lunar to solar", d: "Convert a lunar date like \"08-19\" back to solar; a year may be included" },
+  relativeToDate: { n: "Relative to date", d: "Resolve descriptions like \"3 days ago\" back to a concrete date" },
+  linkToDate: { n: "Link to date", d: "Strip [[]] into a plain date, e.g. [[2026-09-19]] becomes 2026-09-19" },
+  stripWeekday: { n: "Remove weekday", d: "Turn \"2026-09-19 Sat\" back into \"2026-09-19\"" },
+  termToDate: { n: "Solar term to date", d: "Look up the date of a solar term, e.g. \"Lichun\" becomes 2026-02-04; a year may be included" },
+  ganzhiToYear: { n: "Ganzhi to year", d: "Convert a ganzhi pair like \"Bingwu\" to the nearest Gregorian year, e.g. Bingwu to 2026 (Horse)" },
+  festival: { n: "Date to festival", d: "Find which festival this day is, e.g. 2026-10-01 is National Day; hidden when none" },
+  festivalToDate: { n: "Festival to date", d: "Work out the date of a festival, e.g. Mid-Autumn is the solar date of lunar 08-15" },
+  countdown: { n: "Countdown", d: "Days until a date; past dates show \"N days ago\", today shows \"that is today\"" },
+  dateDiff: { n: "Date difference", d: "Select text containing two dates to get the number of days between them" },
+};
+
+/* 取转换项的显示名/说明：非英文态或查不到都回落中文原文 */
+function actionText(key, field, zh) {
+  if (resolve() !== 'en') return zh;
+  const e = ACTION_EN[key];
+  if (!e) return zh;
+  return (field === 'desc' ? e.d : e.n) || zh;
+}
+
+
+/*
+ * 时间口径三项的名称、说明与选项的英文表（按 key）。
+ * 同 ACTION_EN：这些文案在数据里、以变量传给 setName，守卫扫不到。
+ */
+const JUDGE_EN = {
+  weekendDay: {
+    n: 'Which day counts as the weekend',
+    d: 'In spoken Chinese the weekend can mean Saturday or Sunday; this sets the default.',
+    o: { 6: 'Saturday', 7: 'Sunday' },
+  },
+  nextWeekdayMode: {
+    n: 'How to read "next Monday"',
+    d: 'When today is Sunday, does "next Monday" mean tomorrow, or the Monday of the following week?',
+    o: { tomorrow: 'This week +7 days (tomorrow)', nextweek: 'Strictly the next calendar week' },
+  },
+  dayOnlyMode: {
+    n: 'Which month to fill in for "the 17th"',
+    d: 'When a day is written with no month, which month is used?',
+    o: {
+      current: 'Current month',
+      upcoming: 'Current month, next month if past',
+      off: 'Do not convert',
+    },
+  },
+};
+/* 取时间口径的显示文案：field 为 name / desc / opt:<值> */
+function judgeText(key, field, zh) {
+  if (resolve() !== 'en') return zh;
+  const e = JUDGE_EN[key];
+  if (!e) return zh;
+  if (field === 'desc') return e.d || zh;
+  if (field.indexOf('opt:') === 0) {
+    const o = e.o || {};
+    return o[field.slice(4)] || zh;
+  }
+  return e.n || zh;
+}
+
+
+/* 预设格式名的英文表（按格式串索引；格式串本身是数据，不翻译） */
+const PRESET_EN = {
+  'YYYY-MM-DD HH:mm:ss': 'Date + time (default)',
+  'YYYY-MM-DD HH:mm': 'Date + hours:minutes',
+  'HH:mm:ss': 'Time with seconds',
+  'HH:mm': 'Hours:minutes',
+  'YYYY年M月D日 HH:mm': 'Chinese date + hours:minutes',
+  'YYYY/MM/DD HH:mm:ss': 'Slash date + time',
+  'YYYY-MM-DD ddd HH:mm': 'With weekday',
+  'YYYY-MM-DDTHH:mm:ssZ': 'ISO 8601',
+};
+function presetText(value, zh) {
+  if (resolve() !== 'en') return zh;
+  return PRESET_EN[value] || zh;
+}
+
+/*
+ * 下拉选项的英文表。
+ * 这类文案的数据在别处（settings.js / pomowin.js / calendar.js），
+ * 以变量传进 addOption —— 守卫扫不到（实参不是字面量），故单独建表。
+ * 表里的键必须是数据的 value，不能是中文标签（中文会随措辞改）。
+ */
+const OPTION_EN = {
+  weekStart: {
+    locale: 'Follow system region',
+    sunday: 'Sunday',
+    monday: 'Monday',
+    tuesday: 'Tuesday',
+    wednesday: 'Wednesday',
+    thursday: 'Thursday',
+    friday: 'Friday',
+    saturday: 'Saturday',
+  },
+  theme: {
+    classic: 'Classic (default)',
+    minimal: 'Minimal',
+    dynamic: 'Flowing light (animated)',
+    ethereal: 'Ethereal purple (water-light gradient)',
+    scythe: 'Scythe (dark red blood-flow)',
+    custom: 'Custom (write your own CSS)',
+  },
+  popoutPos: {
+    'bottom-right': 'Bottom-right',
+    'bottom-left': 'Bottom-left',
+    'top-right': 'Top-right',
+    'top-left': 'Top-left',
+    center: 'Center of screen',
+    system: 'Let the system decide',
+  },
+};
+
+/*
+ * 杂项标签的英文表：同样以变量传进来的一类。
+ * fmtToken / recVar 两组用 token 原文当键（token 本身就是稳定标识）。
+ */
+const MISC_EN = {
+  noteKind: { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' },
+  tsSlash: { tsDefault: 'Default format', tsTime: 'Time only', tsDate: 'Date only' },
+  fmtToken: {
+    'YYYY': 'Four-digit year, e.g. 2026',
+    'MM / M': 'Month, zero-padded / not padded',
+    'DD / D': 'Day, zero-padded / not padded',
+    'dddd / ddd': 'Weekday, e.g. Friday / Fri',
+    'HH / H': 'Hour (24-hour)',
+    'hh / h': 'Hour (12-hour)',
+    'mm / m': 'Minute',
+    'ss / s': 'Second',
+    'A / a': 'AM/PM',
+    'Z / ZZ': 'Timezone, e.g. +08:00',
+  },
+  recVar: {
+    '{{VALUE}}': 'One-line summary (ready for Capture)',
+    '{{VALUE:content}}': 'Full text generated from the built-in template',
+    '{{VALUE:date}}': 'Date',
+    '{{VALUE:time}}': 'End time',
+    '{{VALUE:range}}': 'Start–end time range',
+    '{{VALUE:cycles}}': 'Completed cycles',
+    '{{VALUE:focus}}': 'Total focus minutes',
+    '{{VALUE:rest}}': 'Total break minutes',
+    '{{VALUE:focusText}}': 'Focus duration with unit; follows "Record to seconds"',
+    '{{VALUE:restText}}': 'Break duration with unit; precision as above',
+    '{{VALUE:pauses}}': 'Number of pauses',
+    '{{VALUE:longBreaks}}': 'Number of long breaks',
+    '{{VALUE:skippedFocus}}': 'Focus segments skipped and not counted',
+    '{{VALUE:skippedBreak}}': 'Break segments skipped and not counted',
+    '{{VALUE:profile}}': 'Duration profile used',
+  },
+};
+
+function optText(group, value, zh) {
+  if (resolve() !== 'en') return zh;
+  const g = OPTION_EN[group];
+  return (g && g[value]) || zh;
+}
+
+function miscText(group, key, zh) {
+  if (resolve() !== 'en') return zh;
+  const g = MISC_EN[group];
+  return (g && g[key]) || zh;
+}
+
+/* 时段名的英文表（时段键同时是数据键，但显示给用户看时要翻译） */
+const DAYPART_EN = {
+  '凌晨': 'Early morning',
+  '早上': 'Morning',
+  '中午': 'Noon',
+  '下午': 'Afternoon',
+  '傍晚': 'Dusk',
+  '晚上': 'Evening',
+  '夜里': 'Late night',
+  '深夜': 'Small hours',
+};
+function daypartText(key, zh) {
+  if (resolve() !== 'en') return zh;
+  return DAYPART_EN[key] || zh;
+}
+
+module.exports = {
+  LANGS,
+  t,
+  normalizeLang: normalize,
+  setLang,
+  getLang,
+  registerLang,
+  allLangs,
+  MONTH_NAMES,
+  WEEKDAY_NAMES,
+  STATE_NAMES,
+  calLang,
+  actionText,
+  judgeText,
+  presetText,
+  optText,
+  miscText,
+  daypartText,
+  toTW,
+  detectSystemLang,
+  matchLang,
+  renderLangTab,
+};

@@ -3877,11 +3877,18 @@ class TimeToolsSettingTab extends obsidian.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     /*
-     * 显式给设置页一个唯一 id。
-     * Obsidian 按 id 索引设置页，id 缺失或重复会让它与其他插件的设置页
-     * 互相覆盖（表现为点开 A 插件却看到 B 的内容）。
+     * 设置页 id 必须等于插件 id（manifest.id），不能另起一个「更好看」的名字。
+     *
+     * Obsidian 是按「插件 id」定位设置页的：app.setting.openTabById(manifest.id)。
+     * 这里曾写成 'time-tools-settings' —— 设置页在设置面板里照常显示、也能手动点开，
+     * 但「已安装插件」的三点菜单少一个「设置」、插件详情页少一个「选项」按钮，
+     * 因为按 manifest.id 查不到这个标签页，Obsidian 就当它「没有可配置选项」。
+     *
+     * id 缺失或重复仍会让两个插件的设置页互相覆盖（点开 A 却看到 B 的内容），
+     * 所以保持显式赋值 —— 但值必须取自 manifest，不要手写字符串。
      */
-    this.id = 'time-tools-settings';
+    const manifestId = plugin && plugin.manifest && plugin.manifest.id;
+    if (manifestId) this.id = manifestId;
     this.plugin = plugin;
     this.ticker = new PreviewTicker();
     this.activeTab = this.normalizeTab(plugin.settings.pomodoro.lastSettingsTab);

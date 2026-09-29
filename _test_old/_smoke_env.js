@@ -26,27 +26,11 @@ global.document = {
 global.__modals = [];
 global.__notices = [];
 global.__clipboard = '';
-/*
- * Node 21+ 内置了 globalThis.navigator（只有 getter，没 setter），
- * 直接 `global.navigator = {...}` 在非严格模式下会【静默失败】——
- * 赋值不生效、也不报错，于是 navigator.clipboard 永远是 undefined，
- * recorder.js 的 `if (navigator.clipboard && ...)` 安静地跳过写入，
- * 表现为「剪贴板相关的 5 项全红」，看起来像功能坏了，其实是环境没装上。
- *
- * 实测：Node v20 无内置 navigator（赋值成功、全绿），
- *       Node v24 有只读 navigator（赋值失效、5 项红）。同一份代码两种结果。
- * 故必须走 defineProperty 强制覆盖，不能写成简单赋值。
- */
-Object.defineProperty(global, 'navigator', {
-  value: {
-    clipboard: {
-      writeText: async (t) => { global.__clipboard = t; },
-    },
+global.navigator = {
+  clipboard: {
+    writeText: async (t) => { global.__clipboard = t; },
   },
-  writable: true,
-  configurable: true,
-  enumerable: true,
-});
+};
 
 const { migrateSettings, applyProfile } = require(__dirname + '/../src/settings.js');
 const pomodoro = require(__dirname + '/../src/pomodoro.js');

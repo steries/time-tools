@@ -711,7 +711,8 @@ Calendar（liamcain/obsidian-calendar-plugin）设置页在**日历视图被打�
 |---|---|---|
 | 启用本插件后**其他插件**设置页/界面异常 | onload 里同步 `detachLeavesOfType` 等工作区操作，此时别的插件还在初始化 | 延后到 `app.workspace.onLayoutReady` |
 | 禁用本插件后其他插件反而异常 | `onunload` 抛错，中断了 Obsidian 的插件关闭流程 | onunload 全程 try/catch |
-| 点开 A 插件设置页看到 B 的内容 | 设置页 `id` 缺失/重复 | 显式 `this.id = 'time-tools-settings'` |
+| 点开 A 插件设置页看到 B 的内容 | 设置页 `id` 缺失/重复 | 显式 `this.id = plugin.manifest.id`（**不能**手写别的字符串） |
+| **已安装插件三点菜单没有「设置」、插件详情页没有「选项」按钮** | 设置页 `id` 被写成自定义的 `'time-tools-settings'` —— Obsidian 按 `plugin.manifest.id` 定位设置页（`openTabById(manifest.id)`），查不到就判定该插件「没有可配置的选项」 | `id` 必须等于 `plugin.manifest.id`（v3.29 修复，`_test/settingtab.js` 守着） |
 | 设置面板卡在半渲染状态 | 某个设置页 `display()` 抛错 | `display()` 整体兜底，只显示一行错误 |
 
 **排查顺序**：先看控制台红字 → 再对照上表定位。

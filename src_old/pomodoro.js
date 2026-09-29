@@ -1,0 +1,3452 @@
+/*
+ * 模块二：番茄钟
+ *
+ * 周期：专注 + 短休息 = 一轮；每完成 N 轮询问是否进入长休息，不会自动进入。
+ * 模式：自动模式段结束即流转；手动模式停在待开始，等用户点按钮。
+ * 计时：用绝对结束时间戳，窗口失焦回来后可自动校准。
+ * 入口：斜杠命令 / 可拖动浮窗 / 侧边栏视图 / 状态栏 / 命令面板。
+ */
+
+const obsidian = require('obsidian');
+const { normalizePath } = require('obsidian');
+const { t: i18nT, STATE_NAMES, getLang, toTW, optText, miscText } = require('./i18n.js');
+/*
+ * 会话记录已拆到 ./recorder.js（写笔记 / QuickAdd / 补跑桥接）。
+ * 这里用解构把符号恢复成本地标识符，module.exports 对外接口一字不改。
+ */
+const {
+  Recorder, renderRecordSettings, renderTemplate,
+  sanitizeFileName, insertAtTop, confirmDisableRecord,
+  accumulateStats, showStats, hasDataview,
+} = require('./recorder.js');
+const {
+  applyProfile,
+  makeProfileId,
+  confirmDialog,
+  DEFAULT_RECORD_TEMPLATE,
+  VALID_POMO_THEME,
+  POMO_THEME_OPTIONS,
+} = require('./settings.js');
+const { PomoSync } = require('./pomosync.js');
+/* 独立窗口的尺寸/位置/置顶/无边框，见 pomowin.js（只在 pop-out 那份实例里生效） */
+const {
+  isPopoutWindow,
+  electronWindow,
+  applyPopoutWindow,
+  applyPopoutWindowSoon,
+  applyDeskDock,
+  POPOUT_POS_OPTIONS,
+} = require('./pomowin.js');
+
+/** 自定义主题注入的 <style> 元素 id —— 全局唯一，便于查找与移除 */
+const POMO_CSS_ID = 'time-tools-pomo-theme-css';
+
+/**
+ * 自定义主题可直接复制的模板。
+ *
+ * 列全所有对外变量，用户改数字即可，不必猜名字。
+ * 刻意保持「注释多于代码」—— 这一整块都是给人读的接口说明。
+ * 变量名与 styles.css 里的 var(--xxx, 兜底) 必须一致，有测试守着。
+ */
+const POMO_CSS_TEMPLATE = [
+  '.pomo-theme-custom {',
+  '  /* 尺寸 */',
+  '  --pomo-width: 240px;        /* 浮窗宽度 */',
+  '  --pomo-height: auto;        /* 最小高度 */',
+  '  --pomo-pad: 12px 14px;      /* 内边距 */',
+  '  --pomo-font-scale: 1;       /* 整体字号倍数 */',
+  '  --pomo-radius: 12px;        /* 圆角 */',
+  '  --pomo-shadow: 0 6px 20px rgba(0,0,0,.28);',
+  '',
+  '  /* 配色 */',
+  '  --pomo-focus: #e87a4a;      /* 专注色 */',
+  '  --pomo-rest: #3fb08a;       /* 短休色 */',
+  '  --pomo-long: #4a90d9;       /* 长休色（不设则跟短休同色） */',
+  '  --pomo-paused: var(--text-faint);',
+  '  --pomo-panel-bg: var(--background-primary);',
+  '  --pomo-panel-border: var(--background-modifier-border);',
+  '',
+  '  /* 背景图：库内相对路径，绝对路径换设备会失效 */',
+  '  --pomo-bg-image: url("附件/tomato.png");',
+  '  --pomo-bg-size: cover;',
+  '  --pomo-bg-position: center;',
+  '  --pomo-bg-blend: normal;',
+  '',
+  '  /* 按钮行：对齐 / 换行 / 间距 */',
+  '  --pomo-actions-justify: space-between;',
+  '  --pomo-actions-wrap: nowrap;',
+  '  --pomo-actions-gap: 6px;',
+  '',
+  '  --pomo-time-size: 30px;     /* 倒计时字号 */',
+  '  --pomo-bar-h: 4px;          /* 进度条高度 */',
+  '}',
+  '',
+  '/* 按钮换顺序：data-act 有 main / skip / stop */',
+  ".pomo-theme-custom .pomo-btn[data-act='stop'] { order: -1; }",
+  '',
+  '/* 按段类别上色：focus / rest / idle（暂停沿用暂停前那一段） */',
+  ".pomo-theme-custom[data-pomo-kind='rest'] .pomo-time {",
+  '  color: var(--pomo-rest);',
+  '}',
+].join('\n');
+
+/**
+ * 把当前主题挂到某个番茄钟根元素上。
+ *
+ * 只增删 class，不动 DOM 结构 —— 切换主题的代价接近零，也不会丢计时状态。
+ * 传进来的 el 可能是浮窗、侧边栏容器或弹窗，三者共用同一套主题变量。
+ */
+function applyTheme(el, theme) {
+  if (!el) return;
+  VALID_POMO_THEME.forEach((t) => el.removeClass('pomo-theme-' + t));
+  el.addClass('pomo-theme-' + (VALID_POMO_THEME.indexOf(theme) >= 0 ? theme : 'classic'));
+}
+
+/**
+ * 同步自定义主题的 CSS。
+ *
+ * theme !== 'custom' 或 css 为空时，把上次注入的 <style> 整个移除 ——
+ * 不留空标签在 head 里。这样反复切主题不会堆积废弃节点。
+ *
+ * 用 textContent 赋值而不是走 HTML 解析：CSS 里常有 &、< 这类字符，
+ * 走文本节点不需要转义，也不会被当成标记解析。
+ * （注意：本文件不要出现那个 HTML 属性名的字面量，
+ *   _test/smoke.js 有一条断言会扫产物里含不含它。）
+ */
+/**
+ * 自定义 CSS 节点的取 / 删，两处共用同一套防御。
+ *
+ * syncCustomCss（切主题、改 CSS）和 destroy（插件卸载）都要操作这个节点，
+ * 若各自直接调 document.getElementById，就得各自写一遍环境判断 ——
+ * 漏一处就会在没有完整 DOM 的环境里抛异常，把整个番茄钟初始化拖垮。
+ */
+function domReady() {
+  return (
+    typeof document !== 'undefined' &&
+    typeof document.getElementById === 'function' &&
+    typeof document.createElement === 'function' &&
+    !!document.head
+  );
+}
+
+function getCustomCssNode() {
+  return domReady() ? document.getElementById(POMO_CSS_ID) : null;
+}
+
+function removeCustomCssNode(node) {
+  if (node && node.parentNode && typeof node.parentNode.removeChild === 'function') {
+    node.parentNode.removeChild(node);
+  }
+}
+
+function syncCustomCss(theme, css) {
+  /*
+   * 先看 document 这套 API 齐不齐。
+   * init() 会直接调本函数，若环境里没有完整 DOM（沙盒测试、某些宿主环境），
+   * 不设防会让整个番茄钟初始化抛异常 —— 主题只是外观，不该拖垮计时。
+   */
+  if (!domReady()) return;
+  const old = getCustomCssNode();
+  const text = theme === 'custom' ? String(css || '').trim() : '';
+  if (!text) {
+    removeCustomCssNode(old);
+    return;
+  }
+  let style = old;
+  if (!style) {
+    style = document.createElement('style');
+    style.id = POMO_CSS_ID;
+    document.head.appendChild(style);
+  }
+  style.textContent = text;
+}
+
+const POMODORO_VIEW_TYPE = 'time-tools-pomodoro-view';
+
+/** 支持的音频扩展名（自定义音效文件夹用） */
+const AUDIO_EXT = ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'];
+
+/** 运行状态枚举 */
+const ST = {
+  IDLE: 'idle', // 未开始
+  FOCUS: 'focus', // 专注中
+  SHORT: 'short', // 短休息中
+  LONG: 'long', // 长休息中
+  PAUSED: 'paused', // 已暂停
+  WAITING: 'waiting', // 手动模式下等待开始下一段
+};
+
+/** 状态中文名（底色）。界面显示一律走 stateName()，别直接用这张表 */
+const LABEL = {
+  idle: '待开始',
+  focus: '专注',
+  short: '短休息',
+  long: '长休息',
+  paused: '已暂停',
+  waiting: '待开始',
+};
+
+/**
+ * 状态名（界面用）：英文查 STATE_NAMES 表，繁體走字表转换，其余用中文底色。
+ * 只出现在浮窗 / 侧边栏 / 提示上 —— 写进笔记的内容一律不翻译。
+ */
+function stateName(k) {
+  const zh = LABEL[k] || '';
+  const lang = getLang();
+  if (lang === 'en') return (STATE_NAMES.en && STATE_NAMES.en[k]) || zh;
+  if (lang === 'zh-TW') return toTW(zh);
+  return zh;
+}
+
+/**
+ * 计时方式按钮的符号。
+ * ＋＝正计时（累加），－＝倒计时（递减）。用纯文本符号而非 SVG / 富文本，
+ * 免得不同主题下图标显示不一致；含义靠 title 悬停提示补足。
+ */
+const COUNTUP_ICON = {
+  up: '＋', // 全角加号：与减号等宽，按钮切换时不会左右跳
+  down: '－', // 全角减号
+  upTitle: '正计时（累加）',
+  downTitle: '倒计时（递减）',
+  count: '－',
+};
+
+/** 毫秒转 MM:SS，秒位补零 */
+function mmss(ms) {
+  const total = Math.max(0, Math.ceil(ms / 1000));
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+/**
+ * 毫秒转 H:MM:SS / MM:SS，秒位补零。
+ * 正计时可能超过一小时，只留两位分钟会显示成 75:30 这种读不懂的数，
+ * 所以超过一小时自动补小时位。倒计时一律用 mmss，不受影响。
+ */
+function hmmss(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const mm = String(m).padStart(2, '0');
+  const ss = String(s).padStart(2, '0');
+  return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+
+/**
+ * 供记录使用的时长文本。
+ *
+ * toSec 为 false（默认）时按分钟记。这里必须跟 data.focusMin **同一套四舍五入** ——
+ * 两者若一个舍一个入，{{focus}} 会写 10、{{focusText}} 却写「9 分钟」，
+ * 同一条记录里两个数字互相打架。
+ * toSec 为 true 时精确到秒，超过一小时补出小时位，不显示成「95 分 0 秒」。
+ */
+function fmtRecordDuration(ms, toSec) {
+  // 分钟口径必须写成 ms/60000，与 data.focusMin 的 Math.round(ms/60000) 逐位一致：
+  // 先换算成秒再除 60 会在半分钟附近差一分钟（9:29.6 → 一个给 9，一个给 10）。
+  if (!toSec) return `${Math.round(ms / 60000)} 分钟`;
+  const total = Math.max(0, Math.round(ms / 1000));
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  if (h > 0) return `${h} 小时 ${m} 分 ${s} 秒`;
+  if (m > 0) return `${m} 分 ${s} 秒`;
+  return `${s} 秒`;
+}
+
+/** 区间裁剪 */
+function clamp(v, min, max) {
+  return Math.min(max, Math.max(min, v));
+}
+
+/* ------------------------------------------------------------------ *
+ * 防误关弹窗基类
+ * ------------------------------------------------------------------ */
+
+/**
+ * 需要「多点几次才关」的弹窗基类。
+ *
+ * Obsidian 的 Modal 在点遮罩、按 Esc、点标题栏 X 时最终都会走到 close()，
+ * 所以这里拦的是 close() 本身 —— 不依赖 onClickOutside / onEscapeKey
+ * 这类版本差异较大的内部方法，只要 Obsidian 还用 close() 收口就成立。
+ *
+ * 两条放行路径：
+ *   - dismiss()：弹窗内按钮，立即关（用户已经明确表态）
+ *   - Esc：明确操作，立即关
+ * 其余（点遮罩 / 点 X）累计到 dismissClicks 次才放行，每次给一次可见反馈。
+ */
+class GuardedModal extends obsidian.Modal {
+  constructor(app, ctrl) {
+    super(app);
+    this.ctrl = ctrl;
+    this.outsideTries = 0; // 已累计的外部关闭尝试次数
+    this.force = false; // true 时 close() 直接放行
+  }
+
+  /** 需要几次外部点击才关闭；1 表示不拦截。非法值退回默认 3 */
+  requiredClicks() {
+    const raw = this.ctrl && this.ctrl.settings ? this.ctrl.settings.dismissClicks : 3;
+    const n = parseInt(raw, 10);
+    if (!isFinite(n)) return 3;
+    return clamp(n, 1, 10);
+  }
+
+  /** 弹窗内按钮走这里：不经计数，直接关 */
+  dismiss() {
+    this.force = true;
+    this.close();
+  }
+
+  close() {
+    if (this.force) {
+      super.close();
+      return;
+    }
+    const need = this.requiredClicks();
+    if (need <= 1) {
+      super.close();
+      return;
+    }
+    this.outsideTries += 1;
+    const left = need - this.outsideTries;
+    if (left <= 0) {
+      this.force = true;
+      super.close();
+      return;
+    }
+    this.showDismissHint(left);
+  }
+
+  /**
+   * Esc 是明确操作，不该被计数拦住。
+   * onEscapeKey 在部分版本不存在，所以先置位再按是否存在分派。
+   */
+  onEscapeKey() {
+    this.force = true;
+    if (typeof super.onEscapeKey === 'function') super.onEscapeKey();
+    else this.close();
+  }
+
+  /** 在弹窗底部提示还剩几次，并抖一下让人注意到 */
+  showDismissHint(left) {
+    const host = this.modalEl || this.contentEl;
+    if (!host || typeof host.querySelector !== 'function') return;
+    let hint = host.querySelector('.pomo-dismiss-hint');
+    if (!hint) {
+      hint = host.createDiv({ cls: 'pomo-dismiss-hint' });
+    }
+    hint.setText(i18nT('k4ec24480', '再点 {0} 次关闭（或按 Esc / 点下方按钮）', left));
+    // 重置动画：先摘类再强制回流，否则连续点击只会播一次
+    host.removeClass('pomo-shake');
+    void host.offsetWidth;
+    host.addClass('pomo-shake');
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 启动面板：选方案 + 填轮数
+ * ------------------------------------------------------------------ */
+class StartModal extends obsidian.Modal {
+  constructor(app, ctrl) {
+    super(app);
+    this.ctrl = ctrl;
+    // 默认沿用上次方案与轮数
+    this.profileId = ctrl.settings.activeProfileId;
+    this.cycles = ctrl.settings.lastCycleChoice;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    const ctrl = this.ctrl;
+    contentEl.empty();
+    contentEl.addClass('pomo-modal');
+    contentEl.createEl('h3', { text: i18nT('k364e9422', '🍅 准备开始') });
+
+    // 轮数引导语
+    contentEl.createDiv({
+      cls: 'pomo-modal-desc',
+      text: i18nT('keb5a9b15', '你认为这个任务需要几轮番茄钟完成？（专+休为一轮）'),
+    });
+
+    // 时长方案选择
+    new obsidian.Setting(contentEl)
+      .setName(i18nT('k44a76734', '时长方案'))
+      .setDesc(i18nT('k7a2bebaa', '选定后本次会话按该方案的专注 / 休息时长执行。'))
+      .addDropdown((d) => {
+        ctrl.settings.profiles.forEach((p) =>
+          d.addOption(p.id, `${p.name}（${p.focusMin}/${p.shortBreakMin}/${p.longBreakMin}）`)
+        );
+        d.setValue(this.profileId).onChange((v) => {
+          this.profileId = v;
+          this.refreshSummary();
+        });
+      });
+
+    // 轮数输入
+    const hint = contentEl.createDiv({ cls: 'pomo-hint' });
+    new obsidian.Setting(contentEl)
+      .setName(i18nT('k12bec730', '轮数'))
+      .setDesc(i18nT('kdb27d153', '填数字则跑到指定轮数自动结束；留空为不限。'))
+      .addText((t) =>
+        t
+          .setPlaceholder(i18nT('k8441b348', '不限'))
+          .setValue(this.cycles ? String(this.cycles) : '')
+          .onChange((v) => {
+            const n = v.trim() === '' ? null : parseInt(v, 10);
+            this.cycles = n && isFinite(n) && n > 0 ? n : null;
+            // 软提示：只提醒，不阻止
+            hint.setText(
+              this.cycles && this.cycles > 4
+                ? i18nT('k3c627aea', '超过 4 轮后效率通常会下降，建议中途安排长休息。')
+                : ''
+            );
+          })
+      );
+
+    /*
+     * 计时方式：待开始界面上的快捷切换。
+     * 正计时是「为了统计一件事实际花了多久」才开的，想开的时候多半正在这里选方案，
+     * 专门跑去设置页翻一遍太绕 —— 所以直接放一对按钮在这里。
+     */
+    const modeRow = contentEl.createDiv({ cls: 'pomo-modal-row pomo-mode-row' });
+    modeRow.createEl('span', {
+      cls: 'pomo-mode-label',
+      text: i18nT('kdb759ce6', '计时方式：倒计时按方案时长倒数；正计时从 0 往上累加、不自动结束。'),
+    });
+    this.btnModeDown = modeRow.createEl('button', { cls: 'pomo-btn', text: i18nT('kccbb967e', '倒计时') });
+    this.btnModeUp = modeRow.createEl('button', { cls: 'pomo-btn', text: i18nT('k08780ced', '正计时') });
+    this.btnModeDown.onclick = () => this.setCountUpMode(false);
+    this.btnModeUp.onclick = () => this.setCountUpMode(true);
+
+    /*
+     * 正计时专用：软目标与间隔提醒的快捷输入。
+     * 开正计时的人多半就是要靠这两个提醒收尾，专门跑去设置页填太绕。
+     * 倒计时下收起 —— 段到点就结束了，这两项设了也不会触发，摆着只会让人以为坏了。
+     */
+    this.countUpExtraEl = contentEl.createDiv({ cls: 'pomo-countup-extra' });
+    const s = ctrl.settings;
+    this.addCountUpNumInput(
+      i18nT('kcc58debe', '软目标（分钟）'),
+      i18nT('k4091e8a7',
+        '累加到这个分钟数时提醒一次并响铃，但**不结束**计时。留空或 0 ＝不提醒。'),
+      () => s.countUpTargetMin,
+      (v) => {
+        s.countUpTargetMin = v;
+      }
+    );
+    this.addCountUpNumInput(
+      i18nT('k1feb0b9c', '间隔提醒（分钟）'),
+      i18nT('k8c4e774c',
+        '每隔这么多分钟提醒一次（填 20 就是第 20、40、60 分钟各一次）。留空或 0 ＝不提醒。'),
+      () => s.countUpRemindEveryMin,
+      (v) => {
+        s.countUpRemindEveryMin = v;
+      }
+    );
+
+    this.refreshModeButtons();
+
+    this.summaryEl = contentEl.createDiv({ cls: 'pomo-summary' });
+    this.refreshSummary();
+
+    const row = contentEl.createDiv({ cls: 'pomo-modal-row' });
+    row.createEl('button', { cls: 'pomo-btn', text: i18nT('kba358518', '不限') }).onclick = () => {
+      this.cycles = null;
+      this.submit();
+    };
+    row.createEl('button', { cls: 'pomo-btn mod-cta', text: i18nT('k22696cbc', '开始') }).onclick = () =>
+      this.submit();
+  }
+
+  /** 展示所选方案的时长预览 */
+  refreshSummary() {
+    const p =
+      this.ctrl.settings.profiles.find((item) => item.id === this.profileId) ||
+      this.ctrl.settings.profiles[0];
+    if (!p || !this.summaryEl) return;
+    this.summaryEl.empty();
+    const up = this.ctrl.settings.countUp === true;
+    this.summaryEl.createDiv({
+      cls: 'pomo-summary-row',
+      text: up
+        ? i18nT('k17730e76', '{0}：专注不限时（正计时）· 休息 {1} 分钟', p.name, p.shortBreakMin)
+        : i18nT('kfbe4f0cf', '{0}：专注 {1} 分钟 · 休息 {2} 分钟',
+          p.name, p.focusMin, p.shortBreakMin),
+    });
+    this.summaryEl.createDiv({
+      cls: 'pomo-summary-row mod-dim',
+      text: i18nT('k3111fb87', `每 ${this.ctrl.settings.longBreakInterval} 轮询问一次长休息（${p.longBreakMin} 分钟）`, this.ctrl.settings.longBreakInterval, p.longBreakMin),
+    });
+  }
+
+  /** 待开始界面上的正计时 / 倒计时快捷切换 */
+  setCountUpMode(on) {
+    const s = this.ctrl.settings;
+    if ((s.countUp === true) === on) return;
+    s.countUp = on;
+    this.ctrl.plugin.saveSettings();
+    this.refreshModeButtons();
+    this.refreshSummary();
+    new obsidian.Notice(
+      on
+        ? i18nT('ka7f46ee3', '已切到正计时：专注段不限时，从 0 往上累加，点「跳过」结束这一段。')
+        : i18nT('k24f4fe80', '已切到倒计时：专注段按方案时长倒数，到点自动结束。')
+    );
+  }
+
+  /** 正计时快捷输入里的单个数字框：只认正整数，其它一律归 0（＝不提醒） */
+  addCountUpNumInput(name, desc, get, set) {
+    new obsidian.Setting(this.countUpExtraEl)
+      .setName(name)
+      .setDesc(desc)
+      .addText((t) =>
+        t
+          .setPlaceholder(i18nT('k8441b348', '不限'))
+          .setValue(get() > 0 ? String(get()) : '')
+          .onChange((v) => {
+            const n = parseInt(String(v || '').trim(), 10);
+            set(isFinite(n) && n > 0 ? n : 0);
+            this.ctrl.plugin.saveSettings();
+          })
+      );
+  }
+
+  /** 当前生效的那个按钮点亮（mod-cta），另一个保持普通样式；正计时才显示快捷输入 */
+  refreshModeButtons() {
+    const up = this.ctrl.settings.countUp === true;
+    if (this.btnModeDown) {
+      if (up) this.btnModeDown.removeClass('mod-cta');
+      else this.btnModeDown.addClass('mod-cta');
+    }
+    if (this.btnModeUp) {
+      if (up) this.btnModeUp.addClass('mod-cta');
+      else this.btnModeUp.removeClass('mod-cta');
+    }
+    // 软目标 / 间隔提醒只对正计时成立，倒计时下整块收起
+    if (this.countUpExtraEl) this.countUpExtraEl.style.display = up ? '' : 'none';
+  }
+
+  submit() {
+    this.close();
+    this.ctrl.startSession(this.cycles, this.profileId);
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 长休息询问：达到间隔轮数时弹出，由用户决定
+ * ------------------------------------------------------------------ */
+class AskLongBreakModal extends GuardedModal {
+  constructor(app, ctrl, onYes, onNo) {
+    super(app, ctrl);
+    this.onYes = onYes;
+    this.onNo = onNo;
+    this.settled = false;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass('pomo-modal');
+    contentEl.createEl('h3', { text: i18nT('k3e13259a', `🍅 已完成 ${this.ctrl.completedCycles} 轮`, this.ctrl.completedCycles) });
+    contentEl.createDiv({
+      cls: 'pomo-modal-desc',
+      text: i18nT('ked3fbdb5', '累计专注 {0} 分钟，是否进入长休息（{1} 分钟）？',
+        Math.round(this.ctrl.focusedMs / 60000), this.ctrl.settings.longBreakMin),
+    });
+
+    const row = contentEl.createDiv({ cls: 'pomo-modal-row' });
+    row.createEl('button', { cls: 'pomo-btn mod-cta', text: i18nT('k5f922dfe', '进入长休息') }).onclick = () => {
+      this.settled = true;
+      this.dismiss();
+      this.onYes();
+    };
+    row.createEl('button', { cls: 'pomo-btn', text: i18nT('k91c6e1ea', '继续专注') }).onclick = () => {
+      this.settled = true;
+      this.dismiss();
+      this.onNo();
+    };
+  }
+
+  onClose() {
+    // 按 ESC 或点遮罩关闭时，视为「继续专注」
+    if (!this.settled) this.onNo();
+    this.contentEl.empty();
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 暂停过多询问：是否放弃当前进度、从本轮重新开始
+ * ------------------------------------------------------------------ */
+class AskRestartModal extends GuardedModal {
+  constructor(app, ctrl, onRestart, onResume) {
+    super(app, ctrl);
+    this.onRestart = onRestart;
+    this.onResume = onResume;
+    this.settled = false;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass('pomo-modal');
+    contentEl.createEl('h3', { text: i18nT('k8dc0e283', '🍅 本轮已暂停多次') });
+    contentEl.createDiv({
+      cls: 'pomo-modal-desc',
+      text: i18nT('k95cc0ea1', '已暂停 {0} 次，{1}还剩 {2}。要从本轮重新开始计时吗？',
+        this.ctrl.pauseCount,
+        stateName(this.ctrl.pausedFrom) || i18nT('kd4040472', '本段'),
+        mmss(this.ctrl.pausedRemainMs)),
+    });
+
+    const row = contentEl.createDiv({ cls: 'pomo-modal-row' });
+    row.createEl('button', { cls: 'pomo-btn mod-cta', text: i18nT('k616ddc13', '重新开始本轮') }).onclick = () => {
+      this.settled = true;
+      this.dismiss();
+      this.onRestart();
+    };
+    row.createEl('button', { cls: 'pomo-btn', text: i18nT('ka6621a08', '继续当前进度') }).onclick = () => {
+      this.settled = true;
+      this.dismiss();
+      this.onResume();
+    };
+  }
+
+  onClose() {
+    if (!this.settled) this.onResume();
+    this.contentEl.empty();
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 会话小结：专注、休息、暂停、跳过、时间段 + 可选的记录区块
+ * ------------------------------------------------------------------ */
+class SummaryModal extends GuardedModal {
+  constructor(app, ctrl, data) {
+    super(app, ctrl);
+    this.data = data;
+    this.titleText = i18nT('k7d6d5c68', '🍅 番茄任务结束');
+    this.recorded = false; // \u672c\u6b21\u4f1a\u8bdd\u662f\u5426\u5df2\u8bb0\u5f55\u8fc7
+    this.closing = false;
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    const d = this.data;
+    contentEl.empty();
+    contentEl.addClass('pomo-modal');
+
+    contentEl.createEl('h3', { text: this.titleText });
+    contentEl.createDiv({
+      cls: 'pomo-modal-desc',
+      text: i18nT('k451ed15e', '完成 {0} 轮 · 长休息 {1} 次', d.cycles, d.longBreaks),
+    });
+
+    const stats = contentEl.createDiv({ cls: 'pomo-summary' });
+    stats.createDiv({
+      cls: 'pomo-summary-row',
+      text: i18nT('k02a2cc48', '专注 {0} 分钟 · 休息 {1} 分钟', d.focusMin, d.restMin),
+    });
+    stats.createDiv({
+      cls: 'pomo-summary-row',
+      text: i18nT('k41c81e58', '暂停 {0} 次', d.pauses),
+    });
+    if (d.range) stats.createDiv({ cls: 'pomo-summary-row mod-dim', text: d.range });
+
+    // \u8df3\u8fc7\u4e0d\u8ba1\u5165\u7edf\u8ba1\uff0c\u5355\u72ec\u5217\u51fa
+    if (d.skippedFocus || d.skippedBreak) {
+      const parts = [];
+      if (d.skippedFocus) parts.push(i18nT('k415fad66', '专注 {0} 段', d.skippedFocus));
+      if (d.skippedBreak) parts.push(i18nT('k3e1033e7', '休息 {0} 段', d.skippedBreak));
+      stats.createDiv({
+        cls: 'pomo-summary-row mod-warn',
+        text: i18nT('k767a365e', '跳过未计入：{0}', parts.join(' · ')),
+      });
+    }
+
+    // \u6309\u94ae\u533a\uff1a\u8bb0\u5f55\u5728\u6700\u5de6\uff0cAgain \u4e0e\u597d\u7684\u6210\u7ec4\u9760\u53f3
+    const row = contentEl.createDiv({ cls: 'pomo-modal-row pomo-modal-row-summary' });
+    this.btnRow = row;
+    this.rowCls = 'pomo-modal-row pomo-modal-row-summary';
+    const rec = this.ctrl.plugin.settings.record;
+
+    if (rec.enabled) {
+      this.btnRecord = row.createEl('button', {
+        cls: 'pomo-btn mod-record',
+        text: i18nT('k620bf820', '记录'),
+      });
+      this.btnRecord.onclick = () => this.doRecord();
+    }
+
+    const right = row.createDiv({ cls: 'pomo-modal-row-right' });
+    this.btnRight = right;
+    this.btnRight = right;
+    this.btnAgain = right.createEl('button', { cls: 'pomo-btn', text: 'Again' });
+    this.btnAgain.onclick = () => this.doAgain();
+    this.btnOk = right.createEl('button', {
+      cls: 'pomo-btn mod-cta',
+      text: i18nT('k375ec885', '好的'),
+    });
+    this.btnOk.onclick = () => this.dismiss();
+  }
+
+  /** \u662f\u5426\u9700\u8981\u5728\u5173\u95ed\u65f6\u81ea\u52a8\u8bb0\u5f55 */
+  shouldAutoRecord() {
+    const rec = this.ctrl.plugin.settings.record;
+    return !!(rec.enabled && rec.autoRecord && !this.recorded);
+  }
+
+  /**
+   * \u70b9\u300c\u8bb0\u5f55\u300d\uff1a\u5148\u5173\u5f39\u7a97\u518d\u5199\u3002
+   * \u987a\u5e8f\u5f88\u91cd\u8981 \u2014\u2014 QuickAdd \u4f1a\u5f39\u81ea\u5df1\u7684\u9009\u62e9\u5668/\u8f93\u5165\u6846\uff0c
+   * \u672c\u5f39\u7a97\u4e0d\u5173\u4f1a\u628a\u5b83\u6321\u4f4f\u3002
+   */
+  doRecord() {
+    this.recorded = true;
+    const data = this.data;
+    this.dismiss();
+    // \u5ef6\u8fdf\u4e00\u70b9\uff0c\u786e\u4fdd\u672c\u5f39\u7a97\u5df2\u5b8c\u5168\u79fb\u9664
+    setTimeout(() => {
+      this.runRecord(data).catch(() => {});
+    }, 60);
+  }
+
+  /** \u70b9\u300cAgain\u300d\uff1a\u5173\u5f39\u7a97\u5e76\u91cd\u65b0\u6253\u5f00\u5f00\u59cb\u9762\u677f */
+  doAgain() {
+    this.dismiss();
+    setTimeout(() => this.ctrl.openStart(), 60);
+  }
+
+  /** \u70b9\u300c\u597d\u7684\u300d\uff1a\u53ea\u5173\u95ed\uff1b\u82e5\u5f00\u4e86\u81ea\u52a8\u8bb0\u5f55\u5219\u5173\u95ed\u540e\u5199 */
+  confirmClose() {
+    this.dismiss();
+    return Promise.resolve(false);
+  }
+
+  /** \u5b9e\u9645\u6267\u884c\u8bb0\u5f55\u5e76\u7ed9\u51fa\u53cd\u9988 */
+  async runRecord(data) {
+    try {
+      await this.ctrl.plugin.recorder.record(data);
+    } catch (e) {
+      new obsidian.Notice('\u8bb0\u5f55\u5931\u8d25\uff1a' + (e && e.message ? e.message : '\u672a\u77e5\u9519\u8bef'));
+    }
+  }
+
+  onClose() {
+    const data = this.data;
+    this.contentEl.empty();
+    // \u81ea\u52a8\u8bb0\u5f55\u653e\u5728\u5173\u95ed\u540e\uff1a\u5f39\u7a97\u5148\u6d88\u5931\uff0cQuickAdd \u624d\u4e0d\u4f1a\u88ab\u6321
+    if (this.shouldAutoRecord()) {
+      this.recorded = true;
+      setTimeout(() => {
+        this.runRecord(data).catch(() => {});
+      }, 60);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 浮窗 UI：可拖动、可吸附、可最小化
+ * ------------------------------------------------------------------ */
+/**
+ * 当前的语义类别：focus / rest / idle。
+ *
+ * 两条容易写错的判定，这里集中处理，浮窗与侧边栏共用同一套：
+ *   1. 暂停沿用暂停前的那一段 —— 否则一轮专注中途暂停会被当成「未开始」；
+ *   2. WAITING（手动模式下等待开始下一段）按待开始的那一段算。
+ *
+ * 返回值只表示「现在属于哪一类」，不携带任何颜色：
+ * 具体配色由 CSS 读 data-pomo-kind 决定，功能代码不碰外观。
+ */
+function kindOf(ctrl) {
+  let st = ctrl.state === ST.PAUSED ? ctrl.pausedFrom || ST.FOCUS : ctrl.state;
+  if (st === ST.WAITING) st = ctrl.pendingState || st;
+  if (st === ST.FOCUS) return 'focus';
+  if (st === ST.SHORT || st === ST.LONG) return 'rest';
+  return 'idle';
+}
+
+class FloatUI {
+  constructor(ctrl) {
+    this.ctrl = ctrl;
+    this.minimized = false;
+    this.dragging = false;
+    this._paint = {}; // 上一帧已写入的值：用于跳过无变化的 DOM 写入
+    this.build();
+  }
+
+  /**
+   * 脏检查写入：值没变就不碰 DOM。
+   *
+   * 为什么必须有：update() 每秒被 tick 调一次，但每秒真正会变的只有倒计时
+   * 和进度条；标题、按钮文案、轮次圆点只在状态切换或完成一轮时才变。
+   * 无差别重绘会让这些恒定节点每秒被白写一次（实测每帧 9 次 setText，
+   * 其中 8 次完全冗余）。状态切换时值本身就变了，照样会写，手感不受影响。
+   */
+  _paintSet(key, value, apply) {
+    if (this._paint[key] === value) return;
+    this._paint[key] = value;
+    apply(value);
+  }
+
+  _txt(el, key, value) {
+    this._paintSet(key, value, (v) => el.setText(v));
+  }
+
+  _attr(key, value) {
+    this._paintSet('@' + key, value, (v) => this.el.setAttribute(key, v));
+  }
+
+  _rmAttr(key) {
+    const k = '@' + key;
+    if (this._paint[k] === null) return;
+    this._paint[k] = null;
+    this.el.removeAttribute(key);
+  }
+
+  build() {
+    const el = document.createElement('div');
+    el.className = 'pomo-float pomo-hidden';
+    applyTheme(el, this.ctrl.settings.theme);
+    document.body.appendChild(el);
+    this.el = el;
+
+    // 头部：标题 + 轮次 + 设置 + 最小化/恢复 + 隐藏
+    // 后两者带 pomo-hide-on-mini：最小化后头部只留恢复按钮
+    const header = el.createDiv({ cls: 'pomo-float-header' });
+    this.titleEl = header.createSpan({ cls: 'pomo-float-title', text: i18nT('ke772dd03', '🍅 番茄钟') });
+    this.cycleEl = header.createSpan({ cls: 'pomo-float-cycle' });
+
+    const gear = header.createSpan({ cls: 'pomo-float-btn pomo-hide-on-mini', text: '⚙' });
+    gear.title = i18nT('kf164c4ad', '打开番茄钟设置');
+    gear.onclick = () => this.ctrl.plugin.openSettings('pomodoro');
+
+    const mini = header.createSpan({ cls: 'pomo-float-btn pomo-float-mini', text: '—' });
+    mini.title = i18nT('ka7d84685', '最小化');
+    mini.onclick = () => this.toggleMinimize();
+    this.miniEl = mini;
+
+    const close = header.createSpan({ cls: 'pomo-float-btn pomo-hide-on-mini', text: '×' });
+    close.title = i18nT('kda43918a', '隐藏（计时继续，点状态栏唤回）');
+    close.onclick = () => this.hide();
+
+    // 主体：状态 / 倒计时 / 进度 / 按钮
+    const body = el.createDiv({ cls: 'pomo-float-body' });
+    this.stateEl = body.createDiv({ cls: 'pomo-state' });
+    this.timeEl = body.createDiv({ cls: 'pomo-time' });
+    this.dotsEl = body.createDiv({ cls: 'pomo-dots' });
+    const bar = body.createDiv({ cls: 'pomo-bar' });
+    this.barFillEl = bar.createDiv({ cls: 'pomo-bar-fill' });
+    this.totalEl = body.createDiv({ cls: 'pomo-total' });
+
+    const row = el.createDiv({ cls: 'pomo-float-row' });
+    this.btnMain = row.createEl('button', { cls: 'pomo-btn', text: i18nT('k197c30db', '暂停') });
+    this.btnMain.onclick = () => this.ctrl.togglePause();
+    this.btnSkip = row.createEl('button', { cls: 'pomo-btn', text: i18nT('k3ae7f41f', '跳过') });
+    this.btnSkip.onclick = () => this.ctrl.skip();
+    /*
+     * 计时方式快捷切换：只在「待开始」露出来。
+     * 已经在跑的那一段不给切 —— 切了显示的数字会从「剩余」跳成「已过」，
+     * 同一个数两种读法，足够让人以为计时坏了。
+     */
+    this.btnMode = row.createEl('button', { cls: 'pomo-btn', text: COUNTUP_ICON.count });
+    this.btnMode.setAttribute('data-act', 'mode');
+    this.btnMode.onclick = () => this.ctrl.toggleCountUp();
+    // 保存引用：文字要随语言变化，必须在 update() 里走脏检查，
+    // 不能用 createEl 一次性写死（refreshUI 只更新值、不重建节点）
+    this.btnStop = row.createEl('button', { cls: 'pomo-btn' });
+    this.btnStop.setAttribute('data-act', 'stop');
+    this.btnStop.onclick = () => this.ctrl.stop();
+
+    this.bindDrag(header);
+    this.applyPosition();
+    this.update();
+  }
+
+  /** 头部作为拖拽把手，按钮点击不触发拖拽 */
+  bindDrag(handle) {
+    handle.addClass('pomo-drag-handle');
+    handle.addEventListener('mousedown', (e) => {
+      if (e.target.classList.contains('pomo-float-btn')) return;
+      this.dragging = true;
+      const rect = this.el.getBoundingClientRect();
+      this.dragOffsetX = e.clientX - rect.left;
+      this.dragOffsetY = e.clientY - rect.top;
+      this.el.addClass('pomo-dragging');
+      e.preventDefault();
+    });
+
+    this._onMove = (e) => {
+      if (!this.dragging) return;
+      this.el.style.left = e.clientX - this.dragOffsetX + 'px';
+      this.el.style.top = e.clientY - this.dragOffsetY + 'px';
+      this.el.style.right = 'auto';
+      this.el.style.bottom = 'auto';
+      this.el.style.transform = 'none';
+    };
+    this._onUp = () => {
+      if (!this.dragging) return;
+      this.dragging = false;
+      this.el.removeClass('pomo-dragging');
+      // 吸附关闭时停在松手位置
+      if (this.ctrl.settings.snapToEdge) this.snapToEdge();
+      else this.saveFreePosition();
+    };
+    window.addEventListener('mousemove', this._onMove);
+    window.addEventListener('mouseup', this._onUp);
+  }
+
+  /** 记下当前视口尺寸，供下次判断能否直接复用像素坐标 */
+  rememberViewport() {
+    this.ctrl.settings.lastVw = window.innerWidth;
+    this.ctrl.settings.lastVh = window.innerHeight;
+  }
+
+  /** 视口尺寸是否与上次记录时一致 —— 一致才能安全复用像素坐标 */
+  viewportUnchanged() {
+    const s = this.ctrl.settings;
+    return s.lastVw === window.innerWidth && s.lastVh === window.innerHeight;
+  }
+
+  /**
+   * 吸附到最近的边。
+   * 同时记下「沿边比例」和「沿边像素」：视口尺寸没变时用像素精确还原，
+   * 尺寸变了才退回按比例换算，兼顾精确与自适应。
+   */
+  snapToEdge() {
+    const rect = this.el.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const dists = {
+      top: cy,
+      bottom: window.innerHeight - cy,
+      left: cx,
+      right: window.innerWidth - cx,
+    };
+    let edge = 'right';
+    for (const key of Object.keys(dists)) {
+      if (dists[key] < dists[edge]) edge = key;
+    }
+
+    const horizontal = edge === 'top' || edge === 'bottom';
+    const px = horizontal ? cx : cy;
+    const span = horizontal ? window.innerWidth : window.innerHeight;
+
+    const s = this.ctrl.settings;
+    s.floatEdge = edge;
+    s.floatOffset = clamp(px / span, 0.05, 0.95);
+    s.floatPx = Math.round(px);
+    this.rememberViewport();
+    this.ctrl.plugin.saveSettings();
+    this.applyPosition();
+  }
+
+  /** 自由放置：记精确像素，同时留一份比例用于窗口尺寸变化后换算 */
+  saveFreePosition() {
+    const rect = this.el.getBoundingClientRect();
+    const maxX = Math.max(1, window.innerWidth - rect.width);
+    const maxY = Math.max(1, window.innerHeight - rect.height);
+    const s = this.ctrl.settings;
+    s.freePxX = Math.round(rect.left);
+    s.freePxY = Math.round(rect.top);
+    s.freeX = clamp(rect.left / maxX, 0, 1);
+    s.freeY = clamp(rect.top / maxY, 0, 1);
+    this.rememberViewport();
+    this.ctrl.plugin.saveSettings();
+    this.applyPosition();
+  }
+
+  /** 把像素值夹回可视范围，避免窗口缩小后浮窗跑到屏幕外 */
+  clampPx(value, span, size) {
+    const max = Math.max(0, span - size);
+    return Math.round(clamp(value, 0, max));
+  }
+
+  /** 按当前模式（吸附 / 自由）定位浮窗；视口未变时优先用精确像素 */
+  applyPosition() {
+    const s = this.ctrl.settings;
+    const style = this.el.style;
+    style.left = style.right = style.top = style.bottom = 'auto';
+    style.transform = 'none';
+
+    if (!s.snapToEdge) {
+      const rect = this.el.getBoundingClientRect();
+      const maxX = Math.max(1, window.innerWidth - rect.width);
+      const maxY = Math.max(1, window.innerHeight - rect.height);
+      // 视口尺寸未变 → 直接用像素；变了 → 按比例换算
+      const x = this.viewportUnchanged() && s.freePxX !== null
+        ? this.clampPx(s.freePxX, window.innerWidth, rect.width)
+        : Math.round(s.freeX * maxX);
+      const y = this.viewportUnchanged() && s.freePxY !== null
+        ? this.clampPx(s.freePxY, window.innerHeight, rect.height)
+        : Math.round(s.freeY * maxY);
+      style.left = x + 'px';
+      style.top = y + 'px';
+      this.el.setAttribute('data-edge', 'free');
+      return;
+    }
+
+    const horizontal = s.floatEdge === 'top' || s.floatEdge === 'bottom';
+    const span = horizontal ? window.innerWidth : window.innerHeight;
+    const along = this.viewportUnchanged() && s.floatPx !== null
+      ? this.clampPx(s.floatPx, span, 0)
+      : Math.round(s.floatOffset * span);
+
+    if (horizontal) {
+      style.left = along + 'px';
+      style[s.floatEdge] = '12px';
+      style.transform = 'translateX(-50%)';
+    } else {
+      style.top = along + 'px';
+      style[s.floatEdge] = '12px';
+      style.transform = 'translateY(-50%)';
+    }
+    this.el.setAttribute('data-edge', s.floatEdge);
+  }
+
+  toggleMinimize() {
+    this.minimized = !this.minimized;
+    this.update();
+  }
+
+  show() {
+    this.el.removeClass('pomo-hidden');
+    this.applyPosition();
+    this.update();
+  }
+
+  hide() {
+    this.el.addClass('pomo-hidden');
+  }
+
+  get visible() {
+    return !this.el.hasClass('pomo-hidden');
+  }
+
+  destroy() {
+    window.removeEventListener('mousemove', this._onMove);
+    window.removeEventListener('mouseup', this._onUp);
+    if (this.el) this.el.remove();
+  }
+
+  /**
+   * 最小化时标题显示的模式名与配色类别。
+   * 暂停沿用暂停前的那一段，否则一轮专注中途暂停会被误显示成「待开始」。
+   */
+  miniBadge() {
+    const c = this.ctrl;
+    // WAITING 是手动模式下「还没开始下一段」，用待开始的那一段来判断
+    let st = c.state === ST.PAUSED ? c.pausedFrom || ST.FOCUS : c.state;
+    if (st === ST.WAITING) st = c.pendingState || st;
+    if (st === ST.FOCUS) return { text: i18nT('k44d41ebe', '专注'), kind: 'focus' };
+    if (st === ST.SHORT || st === ST.LONG) return { text: i18nT('ke55c8529', '休息'), kind: 'rest' };
+    return { text: i18nT('k7f378cec', '番茄钟'), kind: 'idle' };
+  }
+
+  update() {
+    const c = this.ctrl;
+    const st = c.state;
+    this._attr('data-state', st);
+    // 段类别：与最小化徽章同源（暂停沿用暂停前那一段）。
+    // CSS 读这个属性上色，功能代码不写任何颜色值。
+    // 浮窗与侧栏两个入口都必须写，缺一个那边就不上色。
+    this._attr('data-pomo-kind', kindOf(c));
+    this._paintSet('@mini', !!this.minimized, (v) => this.el.toggleClass('pomo-mini', v));
+    this._txt(this.timeEl, 'time', c.displayTime());
+
+    if (this.minimized) {
+      // 标题从「番茄钟」换成本段模式名并上色（配色见 styles.css，走主题变量）
+      const badge = this.miniBadge();
+      this._txt(this.titleEl, 'title', badge.text);
+      this._attr('data-mini-kind', badge.kind);
+      this._txt(this.miniEl, 'mini', '□');
+      this._paintSet('miniTitle', '恢复窗口', (v) => { this.miniEl.title = v; });
+      this._txt(this.cycleEl, 'cycle', c.displayTime());
+      return;
+    }
+
+    this._txt(this.titleEl, 'title', i18nT('k439d0eab', '🍅 番茄钟'));
+    this._rmAttr('data-mini-kind');
+    this._txt(this.miniEl, 'mini', '—');
+    this._paintSet('miniTitle', i18nT('ka7d84685', '最小化'), (v) => { this.miniEl.title = v; });
+
+    // 手动模式下等待开始下一段
+    if (st === ST.WAITING) {
+      const next = stateName(c.pendingState) || '专注';
+      this._txt(this.stateEl, 'state', i18nT('kd6faf18e', '下一段：{0}', next));
+      this._txt(this.cycleEl, 'cycle', i18nT('k9807dac6', '第 {0} 轮', c.completedCycles + 1));
+      this._txt(this.btnMain, 'main',
+        c.pendingState === ST.FOCUS ? i18nT('k70df2063', '开始专注') : i18nT('k6ba5a4b0', '开始休息')
+      );
+      this._txt(this.btnSkip, 'skip', i18nT('k92636e8c', '跳过'));
+    } else {
+      this._txt(this.stateEl, 'state', stateName(st));
+      this._txt(this.cycleEl, 'cycle', st === ST.IDLE ? '' : i18nT('k9807dac6', '第 {0} 轮', c.completedCycles + 1));
+      this._txt(this.btnMain, 'main',
+        st === ST.PAUSED ? i18nT('k27ca568b', '继续')
+          : st === ST.IDLE ? i18nT('ka3e3b883', '开始')
+            : i18nT('k8d63ef38', '暂停')
+      );
+      this._txt(this.btnSkip, 'skip',
+        st === ST.FOCUS ? i18nT('k1271c7e1', '跳过专注') : i18nT('k6542bb90', '跳过休息')
+      );
+    }
+
+    // 「结束」也是会随语言变的，必须走脏检查（与 btnMain / btnSkip 同源）
+    this._txt(this.btnStop, 'stop', i18nT('k1da8a247', '结束'));
+
+    // 计时方式切换：只在本轮还没开始时显示，跑起来后藏起来
+    if (this.btnMode) {
+      this._paintSet('modeShow', st === ST.IDLE ? '' : 'none', (v) => {
+        this.btnMode.style.display = v;
+      });
+      const up = c.settings.countUp === true;
+      this._txt(this.btnMode, 'mode', up ? COUNTUP_ICON.up : COUNTUP_ICON.down);
+      this.btnMode.setAttribute('title', up ? COUNTUP_ICON.upTitle : COUNTUP_ICON.downTitle);
+      this.btnMode.setAttribute('aria-label', up ? COUNTUP_ICON.upTitle : COUNTUP_ICON.downTitle);
+    }
+
+    const interval = Math.max(1, c.settings.longBreakInterval);
+    const inGroup = c.completedCycles % interval;
+    let dots = '';
+    for (let i = 0; i < interval; i++) dots += i < inGroup ? '●' : '○';
+    this._txt(this.dotsEl, 'dots',
+      dots + '  ' + i18nT('k5f9b47b7', '已完成 {0} 轮', c.completedCycles));
+
+    const barW = (c.segmentProgress() * 100).toFixed(1) + '%';
+    this._paintSet('bar', barW, (v) => { this.barFillEl.style.width = v; });
+
+    const target = c.targetCycles
+      ? i18nT('ka4e706c8', '目标 {0} 轮', c.targetCycles)
+      : i18nT('k8d531e21', '目标不限');
+    this._txt(this.totalEl, 'total',
+      i18nT('k510b20d5', '{0} · 已专注 {1} 分钟', target, Math.round(c.focusedMs / 60000)));
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 侧边栏视图：移动端与偏好固定位置时使用
+ * ------------------------------------------------------------------ */
+class PomodoroView extends obsidian.ItemView {
+  constructor(leaf, ctrl) {
+    super(leaf);
+    this.ctrl = ctrl;
+  }
+
+  getViewType() {
+    return POMODORO_VIEW_TYPE;
+  }
+  getDisplayText() {
+    return '番茄钟';
+  }
+  getIcon() {
+    return 'timer';
+  }
+
+  async onOpen() {
+    this.render();
+    /*
+     * 本实例跑在独立窗口里时，把窗口设置应用上去。
+     * 必须在这里做：主窗口调 openPopoutLeaf 后，主窗口的 activeWindow
+     * 仍指向自己，改不到新建的那个窗口 —— 只有 pop-out 这份实例能改自己。
+     */
+    if (isPopoutWindow()) applyPopoutWindowSoon(this.ctrl.settings);
+  }
+
+  render() {
+    const c = this.contentEl;
+    const s = this.ctrl.settings;
+    c.empty();
+    c.addClass('pomo-container');
+    applyTheme(c, s.theme);
+
+    const header = c.createDiv({ cls: 'pomo-float-header' });
+    header.createSpan({ cls: 'pomo-float-title', text: i18nT('ke772dd03', '🍅 番茄钟') });
+    const gear = header.createSpan({ cls: 'pomo-float-btn', text: '⚙' });
+    gear.title = i18nT('kf164c4ad', '打开番茄钟设置');
+    gear.onclick = () => this.ctrl.plugin.openSettings('pomodoro');
+
+    this.stateEl = c.createDiv({ cls: 'pomo-state' });
+    this.timeEl = c.createDiv({ cls: 'pomo-time' });
+    this.dotsEl = c.createDiv({ cls: 'pomo-dots' });
+    const bar = c.createDiv({ cls: 'pomo-bar' });
+    this.barFillEl = bar.createDiv({ cls: 'pomo-bar-fill' });
+    this.totalEl = c.createDiv({ cls: 'pomo-total' });
+
+    // 同上：外观一律交给 CSS，这里只挂 data-act 供用户改顺序 / 单独隐藏
+    const row = c.createDiv({ cls: 'pomo-float-row pomo-actions' });
+    this.btnMain = row.createEl('button', { cls: 'pomo-btn', text: i18nT('k22696cbc', '开始') });
+    this.btnMain.setAttribute('data-act', 'main');
+    this.btnMain.onclick = () =>
+      this.ctrl.state === ST.IDLE
+        ? this.ctrl.openStart()
+        : this.ctrl.state === ST.WAITING
+        ? this.ctrl.startPending()
+        : this.ctrl.togglePause();
+    const btnSkip = row.createEl('button', { cls: 'pomo-btn', text: i18nT('k3ae7f41f', '跳过') });
+    btnSkip.setAttribute('data-act', 'skip');
+    btnSkip.onclick = () => this.ctrl.skip();
+    // 计时方式快捷切换（与浮窗同源：只在待开始时露出来）
+    this.btnMode = row.createEl('button', { cls: 'pomo-btn', text: COUNTUP_ICON.count });
+    this.btnMode.setAttribute('data-act', 'mode');
+    this.btnMode.onclick = () => this.ctrl.toggleCountUp();
+    // 同上：保存引用，文字在 update() 里随语言更新
+    this.btnStop = row.createEl('button', { cls: 'pomo-btn' });
+    this.btnStop.setAttribute('data-act', 'stop');
+    this.btnStop.onclick = () => this.ctrl.stop();
+
+    c.createDiv({
+      cls: 'pomo-tip',
+      text: i18nT('k897ba57d', `专注 ${s.focusMin} 分钟 · 短休 ${s.shortBreakMin} 分钟 · 每 ${s.longBreakInterval} 轮询问长休息`, s.focusMin, s.shortBreakMin, s.longBreakInterval),
+    });
+
+    this.update();
+  }
+
+  update() {
+    if (!this.timeEl || !this.timeEl.setText) return;
+    const ctrl = this.ctrl;
+    const st = ctrl.state;
+
+    // 与浮窗同源的语义类别，供 CSS 上色（暂停沿用暂停前的那一段）
+    if (this.contentEl && this.contentEl.setAttribute) {
+      this.contentEl.setAttribute('data-pomo-kind', kindOf(ctrl));
+    }
+
+    if (st === ST.WAITING) {
+      const next = ctrl.pendingState === ST.FOCUS
+        ? i18nT('ke217c5bf', '专注')
+        : ctrl.pendingState === ST.LONG
+          ? i18nT('kaf0f24e2', '长休息')
+          : i18nT('k4fcaa04f', '短休息');
+      this.stateEl.setText(i18nT('kd6faf18e', '下一段：{0}', next));
+      this.btnMain.setText(
+        ctrl.pendingState === ST.FOCUS ? i18nT('k70df2063', '开始专注') : i18nT('k6ba5a4b0', '开始休息')
+      );
+    } else {
+      this.stateEl.setText(stateName(st));
+      this.btnMain.setText(
+        st === ST.IDLE ? i18nT('ka3e3b883', '开始') : st === ST.PAUSED ? i18nT('k27ca568b', '继续') : i18nT('k8d63ef38', '暂停')
+      );
+    }
+
+    // 「结束」与浮窗同源：随语言更新，不能在 createEl 时写死
+    if (this.btnStop) this.btnStop.setText(i18nT('k1da8a247', '结束'));
+
+    // 计时方式切换：只在本轮还没开始时显示，跑起来后藏起来
+    if (this.btnMode) {
+      this.btnMode.style.display = st === ST.IDLE ? '' : 'none';
+      const up = ctrl.settings.countUp === true;
+      this.btnMode.setText(up ? COUNTUP_ICON.up : COUNTUP_ICON.down);
+      this.btnMode.setAttribute('title', up ? COUNTUP_ICON.upTitle : COUNTUP_ICON.downTitle);
+      this.btnMode.setAttribute('aria-label', up ? COUNTUP_ICON.upTitle : COUNTUP_ICON.downTitle);
+    }
+
+    this.timeEl.setText(ctrl.displayTime());
+
+    const interval = Math.max(1, ctrl.settings.longBreakInterval);
+    const inGroup = ctrl.completedCycles % interval;
+    let dots = '';
+    for (let i = 0; i < interval; i++) dots += i < inGroup ? '●' : '○';
+    this.dotsEl.setText(i18nT('kd0800fb0', '{0}  已完成 {1} 轮', dots, ctrl.completedCycles));
+
+    this.barFillEl.style.width = (ctrl.segmentProgress() * 100).toFixed(1) + '%';
+    const target = ctrl.targetCycles
+      ? i18nT('ka4e706c8', '目标 {0} 轮', ctrl.targetCycles)
+      : i18nT('k8d531e21', '目标不限');
+    this.totalEl.setText(
+      i18nT('k510b20d5', '{0} · 已专注 {1} 分钟', target, Math.round(ctrl.focusedMs / 60000))
+    );
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 斜杠命令：输入 /pomodoro 唤起
+ * ------------------------------------------------------------------ */
+class PomodoroSuggest extends obsidian.EditorSuggest {
+  constructor(plugin, ctrl) {
+    super(plugin.app);
+    this.plugin = plugin;
+    this.ctrl = ctrl;
+  }
+
+  onTrigger(cursor, editor) {
+    if (!editor) return null;
+    const s = this.ctrl.settings;
+    if (!s.enableSlashCommand) return null;
+
+    const word = String(s.slashTrigger || '').trim().replace(/^\//, '');
+    if (!word) return null;
+
+    const trigger = '/' + word.toLowerCase();
+    const textBefore = editor.getLine(cursor.line).slice(0, cursor.ch).toLowerCase();
+    if (!textBefore.endsWith(trigger)) return null;
+
+    return {
+      start: { line: cursor.line, ch: cursor.ch - trigger.length },
+      end: cursor,
+      query: trigger,
+    };
+  }
+
+  getSuggestions() {
+    const s = this.ctrl.settings;
+    const target = this.ctrl.targetCycles;
+    return [
+      {
+        action: 'start',
+        label: i18nT('k920aec3b', '🍅 开始番茄钟'),
+        hint: target
+          ? i18nT('ka4e706c8', '目标 {0} 轮', target)
+          : i18nT('k390e1e9d', '专注 {0} 分钟 · 不限轮数', s.focusMin),
+      },
+      {
+        action: 'open',
+        label: i18nT('k396977ae', '📋 打开番茄钟面板'),
+        hint: i18nT('kb9ab6cbd', '在侧边栏显示'),
+      },
+    ];
+  }
+
+  renderSuggestion(item, el) {
+    el.addClass('pomo-suggest-item');
+    /*
+     * item.label / item.hint 在 getSuggestions() 里**已经包过 i18nT**
+     * （k920aec3b / ka4e706c8 / k390e1e9d / k396977ae / kb9ab6cbd），
+     * 这里再包 miscText 就是多余的一层 —— 判据看数据定义处，不看渲染处。
+     */
+    el.createDiv({ cls: 'pomo-suggest-label', text: item.label });
+    el.createDiv({ cls: 'pomo-suggest-hint', text: item.hint });
+  }
+
+  selectSuggestion(item) {
+    if (!this.context) return;
+    const { editor, start, end } = this.context;
+    // 先删掉触发词本身，不留痕迹在笔记里
+    editor.replaceRange('', start, end);
+    if (item.action === 'start') this.ctrl.quickStart();
+    else this.ctrl.openSidebar();
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 控制器：状态机 + 计时 + 统计 + 音效
+ * ------------------------------------------------------------------ */
+class PomodoroController {
+  constructor(plugin) {
+    this.plugin = plugin;
+
+    // 运行时状态（不落盘，关闭 Obsidian 即清零）
+    this.state = ST.IDLE;
+    this.pendingState = null; // 手动模式下待开始的下一段
+    this.endsAt = 0; // 当前段结束的绝对时间戳
+    this.pausedRemainMs = 0;
+    this.pausedFrom = null;
+    this.segmentTotalMs = 0;
+    // 正计时状态（不落盘）：当前段是否从 0 往上累加。只有专注段会置 true。
+    this.countUp = false;
+    this.countUpStartAt = 0; // 本段（或本次恢复）的开始时间戳
+    this.countUpBaseMs = 0; // 暂停前累计的时长，恢复时以此为基数继续累加
+    this.countUpNotified = false; // 软目标提醒是否已发过（每段只提醒一次）
+    this.countUpRemindCount = 0; // 间隔提醒已发到第几个间隔（每段重新数）
+    this.completedCycles = 0;
+    this.targetCycles = null; // null 表示不限
+    this.focusedMs = 0;
+    this.restMs = 0;
+    this.longBreaks = 0;
+    this.skippedFocus = 0;
+    this.skippedBreak = 0;
+    this.focusSkippedThisCycle = false; // 本轮专注是否被跳过（跳过则不计入轮次）
+    this.pauseCount = 0; // 当前段的暂停次数，达到阈值触发重开询问
+    this.totalPauses = 0; // 本次会话的累计暂停次数，进入小结
+    this.sessionStart = null;
+    this.askAgainNextCycle = false;
+    // 本实例是否刚刚自己结束了会话。跨窗口同步靠它区分
+    // 「我清掉了共享文件」和「别人清掉了共享文件」，避免把自己也归位掉。
+    this.endedLocally = false;
+
+    /*
+     * 跨窗口归属：只有「拥有者」实例会推进段切换、发声、写笔记。
+     * 独立窗口模式下主窗口与独立窗口各有一个控制器实例，
+     * 靠 PomoSync 的共享文件决定谁推进。非独立窗口模式恒为 true（本地独占）。
+     */
+    this.isSessionOwner = true;
+    /*
+     * 归属是否已写进共享文件。镜像刚接管时先置 false：
+     * 只有确认过的拥有者才能推进段切换，否则两个实例可能同时判定「这一段结束了」。
+     */
+    this.ownerConfirmed = true;
+    this.sync = null; // 在 init() 里创建，需要 plugin 与 app 就位
+
+    this.intervalId = null;
+    this.tickerRegistered = false; // 计时器是否已交给 Obsidian 托管
+    this.lastTickSec = null; // 上次 tick 时渲染的剩余秒数，用于跳过冗余重绘
+    this.floatUI = null;
+    this.statusBar = null;
+    this.soundFiles = []; // 自定义音效文件夹缓存
+    this.soundIndex = 0;
+  }
+
+  get settings() {
+    return this.plugin.settings.pomodoro;
+  }
+
+  get app() {
+    return this.plugin.app;
+  }
+
+  get isMobile() {
+    return !!(obsidian.Platform && obsidian.Platform.isMobile);
+  }
+
+  /** 当前使用的方案名 */
+  get activeProfile() {
+    const s = this.settings;
+    return s.profiles.find((p) => p.id === s.activeProfileId) || s.profiles[0];
+  }
+
+  /** 把当前生效时长写回当前方案；设置页改时长或改名时用 */
+  syncProfile(extra) {
+    const p = this.activeProfile;
+    if (!p) return;
+    const s = this.settings;
+    p.focusMin = s.focusMin;
+    p.shortBreakMin = s.shortBreakMin;
+    p.longBreakMin = s.longBreakMin;
+    Object.assign(p, extra || {});
+  }
+
+  /* ---------------- 生命周期 ---------------- */
+
+  init() {
+    this.statusBar = this.plugin.addStatusBarItem();
+    this.statusBar.addClass('pomo-status');
+    this.statusBar.setText('🍅');
+    this.statusBar.onclick = () => this.toggleFloat();
+
+    // 自定义主题的 CSS 在启动时注入一次；之后由设置项变更驱动
+    syncCustomCss(this.settings.theme, this.settings.customCss);
+
+    if (!this.isMobile && this.settings.uiMode === 'floating') {
+      this.floatUI = new FloatUI(this);
+    }
+
+    if (this.settings.showRibbonIcon) {
+      this.plugin.addRibbonIcon('timer', '番茄钟', () => this.openStart());
+    }
+
+    this.registerCommands();
+    this.refreshSoundFiles();
+
+    /*
+     * 独立窗口模式：挂上跨窗口同步。
+     * 只有这个模式会开轮询 —— 浮窗 / 侧边栏都在同一个窗口里，
+     * 不存在第二个控制器实例，不需要为它付出每秒一次的文件读取。
+     */
+    this.sync = new PomoSync(this);
+    if (this.isPopoutMode) {
+      /*
+       * 独立窗口形态：本实例一开始不主张归属。
+       * 默认给 true 的话，新开的窗口会自认拥有者并立刻心跳，
+       * 与主窗口撞成两个拥有者 —— 段结束那一刻会被判定两次。
+       * 这里交权给轮询：共享文件里有活跃会话且无人认领，才接管。
+       */
+      this.isSessionOwner = false;
+      this.ownerConfirmed = false;
+      this.sync.startPolling();
+      this.sync.adoptOnBoot();
+    }
+  }
+
+  /** 当前是否为「独立窗口」形态（移动端没有 pop-out，一律 false） */
+  get isPopoutMode() {
+    return !this.isMobile && this.settings.uiMode === 'popout';
+  }
+
+  registerCommands() {
+    const p = this.plugin;
+    p.addCommand({ id: 'time-tools-pomodoro-start', name: '番茄钟：开始', callback: () => this.openStart() });
+    p.addCommand({
+      id: 'time-tools-pomodoro-toggle-pause',
+      name: '番茄钟：暂停 / 继续',
+      callback: () => this.togglePause(),
+    });
+    p.addCommand({ id: 'time-tools-pomodoro-skip', name: '番茄钟：跳过当前段', callback: () => this.skip() });
+    p.addCommand({ id: 'time-tools-pomodoro-stop', name: '番茄钟：结束会话', callback: () => this.stop() });
+    p.addCommand({
+      id: 'time-tools-pomodoro-start-next',
+      name: '番茄钟：开始下一段（手动模式）',
+      callback: () => this.startPending(),
+    });
+    p.addCommand({
+      id: 'time-tools-pomodoro-toggle-timer',
+      name: '番茄钟：显示 / 隐藏计时器',
+      callback: () => this.toggleFloat(),
+    });
+    p.addCommand({
+      id: 'time-tools-pomodoro-open-popout',
+      name: '番茄钟：打开独立窗口',
+      callback: () => this.openPopout(),
+    });
+    p.addCommand({
+      id: 'time-tools-pomodoro-toggle-desk-dock',
+      name: '番茄钟：切换桌面常驻（缩小主窗口）',
+      callback: () => this.toggleDeskDock(),
+    });
+    p.addCommand({
+      id: 'time-tools-pomodoro-reapply-window',
+      name: '番茄钟：重新应用独立窗口设置',
+      callback: () => this.reapplyWindow(),
+    });
+    p.addCommand({
+      id: 'time-tools-pomodoro-toggle-countup',
+      name: '番茄钟：切换正计时（专注段不限时）',
+      callback: () => this.toggleCountUp(),
+    });
+    p.addCommand({
+      id: 'time-tools-pomodoro-show-stats',
+      name: '番茄钟：查看累计统计',
+      callback: () => showStats(this.plugin),
+    });
+    p.addCommand({
+      id: 'time-tools-pomodoro-open-settings',
+      name: '番茄钟：打开番茄钟设置',
+      callback: () => this.plugin.openSettings('pomodoro'),
+    });
+  }
+
+  destroy() {
+    this.clearTicker();
+    /*
+     * 卸载时交出控制权而不是清空：另一个窗口还在跑的话应该由它接手，
+     * 而不是让会话凭空消失。全部窗口都关了，文件会在冷启动时按新鲜度丢弃。
+     */
+    if (this.sync) {
+      this.sync.stopPolling();
+      this.sync.release();
+    }
+    if (this.floatUI) this.floatUI.destroy();
+    if (this.statusBar) this.statusBar.remove();
+    // 插件卸载时移除注入的 <style>，别把节点留在 document.head 里
+    removeCustomCssNode(getCustomCssNode());
+  }
+
+  /**
+   * 把当前主题重新挂到所有在场的番茄钟界面上。
+   * 设置里改主题时调用 —— 不重建浮窗，所以计时不会中断。
+   */
+  applyThemeToAll() {
+    const theme = this.settings.theme;
+    syncCustomCss(theme, this.settings.customCss);
+    if (this.floatUI) applyTheme(this.floatUI.el, theme);
+    // 侧边栏视图可能开了多个（不同面板），逐个刷新
+    this.plugin.app.workspace.getLeavesOfType(POMODORO_VIEW_TYPE).forEach((leaf) => {
+      if (leaf && leaf.view && leaf.view.contentEl) applyTheme(leaf.view.contentEl, theme);
+    });
+  }
+
+  /* ---------------- 入口 ---------------- */
+
+  openStart() {
+    new StartModal(this.app, this).open();
+  }
+
+  /** 快捷启动：沿用上次方案与轮数 */
+  quickStart() {
+    if (this.state !== ST.IDLE) {
+      this.revealUI();
+      return;
+    }
+    this.startSession(this.settings.lastCycleChoice || null, this.settings.activeProfileId);
+  }
+
+  async startSession(target, profileId) {
+    this.targetCycles = target && target > 0 ? target : null;
+    this.settings.lastCycleChoice = this.targetCycles;
+
+    // 切换方案：把方案时长同步为生效值
+    if (profileId) {
+      applyProfile(this.plugin.settings, profileId);
+    }
+    this.plugin.saveSettings();
+
+    this.completedCycles = 0;
+    this.focusedMs = 0;
+    this.restMs = 0;
+    this.longBreaks = 0;
+    this.skippedFocus = 0;
+    this.skippedBreak = 0;
+    this.focusSkippedThisCycle = false; // 本轮专注是否被跳过（跳过则不计入轮次）
+    this.pauseCount = 0;
+    this.totalPauses = 0;
+    this.askAgainNextCycle = false;
+    this.sessionStart = Date.now();
+    this.endedLocally = false; // 新会话开始，重新参与归属判定
+
+    /*
+     * 谁点的开始，谁就是拥有者。
+     * 先起段（endsAt 就位）再开窗 —— 开窗会顺带把控制权交给独立窗口，
+     * 那时共享文件里必须是完整状态，否则对方接过去拿到的是空倒计时。
+     */
+    this.isSessionOwner = true;
+    this.ownerConfirmed = !this.sync || !this.sync.available;
+    this.enterFocus();
+    this.revealUI();
+    if (this.sync && !this.isPopoutMode) {
+      await this.sync.write(true);
+      this.ownerConfirmed = true;
+    }
+  }
+
+  revealUI() {
+    if (this.isPopoutMode) {
+      this.openPopout();
+      return;
+    }
+    if (this.isMobile || this.settings.uiMode === 'sidebar') {
+      this.openSidebar();
+      return;
+    }
+    if (!this.floatUI) this.floatUI = new FloatUI(this);
+    this.floatUI.show();
+  }
+
+  /**
+   * 切换「桌面常驻」：把 Obsidian 主窗口缩成番茄钟大小、置顶、摆到屏幕角上。
+   *
+   * 为什么有这条路：独立窗口的系统标题栏去不掉（Electron frame 只能建窗时指定），
+   * 达不到「桌面上一个无边框小番茄钟」的观感，所以反过来缩小主窗口本身。
+   *
+   * 必须在**主窗口**里执行 —— electronWindow 指向本窗口，在 pop-out 里调会改错窗口。
+   *
+   * 关闭时一定会尝试还原原尺寸：主窗口被缩小后如果不还原，
+   * Obsidian 就一直是个小窗，那比不做这个功能更糟。还原失败也要明确告诉用户，
+   * 不能静默 —— 否则他以为开关关了，其实窗口永远回不去了。
+   */
+  toggleDeskDock() {
+    const s = this.settings;
+    const on = !s.deskDock;
+    const r = applyDeskDock(on, s);
+    s.deskDock = r.ok ? on : !!s.deskDock; // 没做成就别把开关也翻过去
+    const left = r.ok && on ? leaveSettingsForDock(this.plugin, this) : true;
+    this.plugin.saveSettings();
+
+    let msg;
+    if (r.reason === 'no-electron') {
+      msg = '当前环境不支持窗口控制，桌面常驻未生效';
+    } else if (on) {
+      msg = r.ok
+        ? '桌面常驻已开启：主窗口已缩小并置顶' +
+          (s.uiMode === 'floating' ? '' : '（当前界面形态不是浮窗，小窗里看不到番茄钟）') +
+          (left ? '' : '（没能自动离开设置页，请手动关掉）') +
+          '（再次运行可还原）'
+        : '桌面常驻开启失败，主窗口未改动';
+    } else {
+      msg = r.restored
+        ? '桌面常驻已关闭：主窗口已还原'
+        : '桌面常驻已关闭，但没能还原原尺寸 —— 请手动拖动窗口';
+    }
+    if (typeof obsidian.Notice === 'function') new obsidian.Notice(msg);
+    return r;
+  }
+
+  /**
+   * 重新应用独立窗口的全部外观设置：置顶 / 尺寸 / 位置 / 隐藏界面元素。
+   *
+   * 为什么需要：设置页多半是在**主窗口**里改的，改完存进 data.json，
+   * 但独立窗口那份插件实例读的还是自己内存里的旧值 —— 它只在 onOpen 时应用一次，
+   * 不会去监听配置变化，这条命令让用户在独立窗口里当场重刷。
+   *
+   * 只在独立窗口里运行才有意义：主窗口的 electronWindow 指向主窗口自己，改不到它。
+   */
+  reapplyWindow() {
+    const r = applyPopoutWindow(this.settings);
+    const REASON = {
+      'no-electron': '当前环境拿不到系统窗口接口，仅隐藏界面元素生效',
+      'pos-system': '开窗位置设为「交给系统决定」，未干预位置',
+      'no-screen': '读不到屏幕尺寸，未定位',
+      'no-size': '量不到窗口尺寸，未定位',
+      'no-move-api': '窗口接口不支持移动，未定位',
+      'move-failed': '定位失败',
+      'onTop-failed': '置顶失败',
+    };
+    const msg =
+      '独立窗口设置已重新应用：' +
+      (r.onTop ? '置顶✓' : '置顶✗') +
+      ' ' +
+      (r.positioned ? '定位✓' : '定位✗') +
+      ' ' +
+      (r.borderless ? '隐藏界面元素✓' : '隐藏界面元素✗') +
+      (r.reason ? '（' + (REASON[r.reason] || r.reason) + '）' : '');
+    if (typeof obsidian.Notice === 'function') new obsidian.Notice(msg);
+    return r;
+  }
+
+  /**
+   * 打开独立窗口（pop-out window）。
+   *
+   * 独立窗口是另一个 Electron 窗口，插件会在里面重新加载一份，
+   * 因此这里只负责「开窗 + 把视图放进去」，不直接驱动它：
+   * 控制权通过 PomoSync 的共享文件交接（见 release()）。
+   * 移动端 / 旧版不支持 pop-out 时回退到侧边栏。
+   */
+  async openPopout() {
+    const ws = this.app.workspace;
+    /*
+     * 本窗口里已经有番茄钟视图时只聚焦它，不再叠开一个窗口。
+     * 这条同时挡住了「从独立窗口里再开一个独立窗口」——
+     * 独立窗口自己也是一份插件实例，startSession 会走到这里。
+     */
+    const mine = ws.getLeavesOfType(POMODORO_VIEW_TYPE);
+    if (mine.length > 0 && typeof ws.revealLeaf === 'function') {
+      ws.revealLeaf(mine[0]);
+      return true;
+    }
+    if (typeof ws.openPopoutLeaf !== 'function') {
+      this.openSidebar();
+      return false;
+    }
+    try {
+      const data = this.popoutWindowData();
+      const leaf = data ? ws.openPopoutLeaf(data) : ws.openPopoutLeaf();
+      if (leaf && typeof leaf.setViewState === 'function') {
+        await leaf.setViewState({ type: POMODORO_VIEW_TYPE, active: true });
+      }
+      /*
+       * 交出控制权：本实例降级为镜像，独立窗口在下一个轮询周期接手驱动。
+       * 计时器不停 —— tick() 会走镜像分支继续渲染，只是不再推进段切换。
+       */
+      this.isSessionOwner = false;
+      if (this.sync) await this.sync.release();
+      this.startTicker();
+      return true;
+    } catch (e) {
+      // pop-out 不支持（移动端或 Electron 过旧）时静默回退，别打断用户
+      this.openSidebar();
+      return false;
+    }
+  }
+
+  /**
+   * 传给 openPopoutLeaf 的窗口初始化数据。
+   * 只有用户填了宽高才传 —— 传了就是「建议尺寸」，由系统决定最终大小。
+   * 窗口位置（x / y）不提供：跨显示器时写死坐标容易把窗口开到屏幕外。
+   */
+  popoutWindowData() {
+    const s = this.settings;
+    const w = Number(s.popoutWidth);
+    const h = Number(s.popoutHeight);
+    if (!(w > 0) || !(h > 0)) return null;
+    return { size: { width: Math.round(w), height: Math.round(h) } };
+  }
+
+  toggleFloat() {
+    if (this.isPopoutMode) {
+      this.openPopout();
+      return;
+    }
+    if (this.isMobile || this.settings.uiMode === 'sidebar') {
+      this.openSidebar();
+      return;
+    }
+    if (!this.floatUI) this.floatUI = new FloatUI(this);
+    if (this.floatUI.visible) this.floatUI.hide();
+    else this.floatUI.show();
+  }
+
+  openSidebar() {
+    const ws = this.app.workspace;
+    let leaf = ws.getLeavesOfType(POMODORO_VIEW_TYPE)[0];
+    if (!leaf) {
+      leaf = ws.getRightLeaf(false);
+      if (!leaf) return;
+      leaf.setViewState({ type: POMODORO_VIEW_TYPE, active: true });
+    }
+    ws.revealLeaf(leaf);
+  }
+
+  /* ---------------- 状态流转 ---------------- */
+
+  enterFocus() {
+    this.startSegment(ST.FOCUS, this.settings.focusMin);
+  }
+  enterShortBreak() {
+    this.startSegment(ST.SHORT, this.settings.shortBreakMin);
+  }
+  enterLongBreak() {
+    this.startSegment(ST.LONG, this.settings.longBreakMin);
+  }
+
+  /** 开启一段计时：用绝对结束时间戳，避免窗口失焦时累减走慢 */
+  startSegment(state, minutes) {
+    this.state = state;
+    this.lastTickSec = null; // 新段强制重绘一次
+    this.pendingState = null;
+    this.segmentTotalMs = minutes * 60 * 1000;
+    this.endsAt = Date.now() + this.segmentTotalMs;
+    this.pauseCount = 0; // 每段重新计暂停次数
+    /*
+     * 正计时只对专注段生效：休息段是固定时长的恢复，正计时没有意义。
+     * 置位必须在 startTicker 之前 —— tick 第一帧就会读它决定分支。
+     */
+    this.countUp = state === ST.FOCUS && this.settings.countUp === true;
+    this.countUpBaseMs = 0;
+    this.countUpStartAt = Date.now();
+    this.countUpNotified = false;
+    this.countUpRemindCount = 0;
+    this.startTicker();
+    this.refreshUI();
+  }
+
+  /** 手动模式：进入待开始，等用户点按钮 */
+  waitFor(state) {
+    this.state = ST.WAITING;
+    this.pendingState = state;
+    const minutes =
+      state === ST.FOCUS
+        ? this.settings.focusMin
+        : state === ST.LONG
+        ? this.settings.longBreakMin
+        : this.settings.shortBreakMin;
+    this.segmentTotalMs = minutes * 60 * 1000;
+    this.endsAt = Date.now() + this.segmentTotalMs;
+    this.clearTicker();
+    if (this.settings.notifyOnSegmentEnd) {
+      new obsidian.Notice(state === ST.FOCUS ? '⏸ 休息结束，点开始专注' : '⏸ 专注结束，点开始休息');
+    }
+    this.refreshUI();
+  }
+
+  /** 开始待开始的那一段（手动模式） */
+  startPending() {
+    this.ensureOwner();
+    if (this.state !== ST.WAITING || !this.pendingState) return;
+    const next = this.pendingState;
+    this.startSegment(next, this.segmentTotalMs / 60000);
+  }
+
+  /**
+   * 启动计时。
+   * registerInterval 只调用一次 —— 它只是把 id 交给 Obsidian 统一托管，
+   * 每段都调会让内部数组持续累积（虽不泄漏，但没有必要）。
+   */
+  startTicker() {
+    this.clearTicker();
+    this.intervalId = window.setInterval(() => this.tick(), 250);
+    if (!this.tickerRegistered && typeof this.plugin.registerInterval === 'function') {
+      this.plugin.registerInterval(this.intervalId);
+      this.tickerRegistered = true;
+    }
+  }
+
+  clearTicker() {
+    if (this.intervalId !== null) {
+      window.clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
+  }
+
+  /**
+   * 计时轮询（每 250ms 一次）。
+   * 显示精度只到秒，若每次 tick 都重绘，会有 3/4 的 DOM 写入完全冗余。
+   * 这里只在「剩余秒数」真的变化时刷新，大幅减少无谓写入。
+   * 状态切换（开始 / 暂停 / 跳段）时由各自方法直接调 refreshUI，不受此影响。
+   */
+  tick() {
+    if (this.state === ST.IDLE || this.state === ST.PAUSED || this.state === ST.WAITING) return;
+
+    /*
+     * 镜像实例（独立窗口模式下非拥有者的那一方）：只渲染倒计时，不推进状态。
+     * 段切换、提示音、写笔记只由拥有者做，否则两个窗口会各跑一份、重复记录。
+     * 倒计时用的是绝对结束时间戳，所以镜像自己算即可，不依赖对方频繁写盘。
+     */
+    if (!this.isSessionOwner) {
+      const r = this.remainMs();
+      const s = Math.ceil(r / 1000);
+      if (s !== this.lastTickSec) {
+        this.lastTickSec = s;
+        this.refreshUI();
+      }
+      return;
+    }
+    // 还没拿到归属确认：只渲染，不推进 —— 此时推进可能与原拥有者撞车
+    if (!this.ownerConfirmed) {
+      const r2 = this.remainMs();
+      const s2 = Math.ceil(r2 / 1000);
+      if (s2 !== this.lastTickSec) {
+        this.lastTickSec = s2;
+        this.refreshUI();
+      }
+      return;
+    }
+    // 拥有者顺带续一次心跳（内部限流），告诉别的窗口「我还在」
+    if (this.sync) this.sync.heartbeat();
+
+    /*
+     * 正计时：永不自动结束，只有用户点「跳过」或结束会话才停。
+     * 必须在这里显式 return —— 若让下面「剩余归零即结束」那段接管，
+     * 开头那一帧 remainMs 还是 0，会被当场误判成「这一段已经结束」。
+     */
+    if (this.countUp) {
+      const el = this.elapsedMs();
+      const sec = Math.floor(el / 1000);
+      if (sec !== this.lastTickSec) {
+        this.lastTickSec = sec;
+        this.refreshUI();
+      }
+      this.checkCountUpTarget(el);
+      this.checkCountUpInterval(el);
+      // 达上限会停表：命中就立即返回，别再刷新、也别再继续累加。
+      if (this.checkCountUpMax(el)) return;
+      return;
+    }
+
+    const remain = this.remainMs();
+    if (remain > 0) {
+      const sec = Math.ceil(remain / 1000);
+      if (sec !== this.lastTickSec) {
+        this.lastTickSec = sec;
+        this.refreshUI();
+      }
+      return;
+    }
+    this.onSegmentEnd(false);
+  }
+
+  /**
+   * 界面显示的「剩余 / 已过」毫秒。
+   * 正计时时这里返回**已过**时长：界面各处都读它，不改调用方即可统一切换语义。
+   * 也正因为永远为正，倒计时那段「剩余归零就结束」的逻辑不会被触发。
+   */
+  remainMs() {
+    if (this.state === ST.IDLE) return 0;
+    if (this.state === ST.PAUSED) return this.pausedRemainMs;
+    if (this.countUp) return this.elapsedMs();
+    return Math.max(0, this.endsAt - Date.now());
+  }
+
+  /**
+   * 当前段已经过去的毫秒。
+   * 注意不要与 remainMs 互相调用 —— 两个函数曾经递归过一次，直接栈溢出。
+   */
+  elapsedMs() {
+    if (this.countUp) {
+      if (this.state === ST.PAUSED) return this.countUpBaseMs;
+      return this.countUpBaseMs + Math.max(0, Date.now() - this.countUpStartAt);
+    }
+    return Math.max(0, this.segmentTotalMs - this.remainMs());
+  }
+
+  /**
+   * 界面显示的计时文本。
+   * 正计时超过一小时补小时位（75:30 这种数没人看得懂），倒计时保持 MM:SS。
+   */
+  displayTime() {
+    const ms = this.remainMs();
+    return this.countUp && ms >= 3600000 ? hmmss(ms) : mmss(ms);
+  }
+
+  /**
+   * 正计时的硬上限：累加到上限就自动停表。
+   * 忘了停的话计时器会一直跑，而超过一天的专注时长通常意味着「人已经不在电脑前」，
+   * 这段数据不可信 —— 所以到点直接停，且**不计入专注时长**，由用户重新开始。
+   * 返回 true 表示已停表（调用方应立即 return）。
+   */
+  checkCountUpMax(elapsed) {
+    if (this.state === ST.PAUSED || this.state === ST.IDLE) return false;
+    const maxMin = Number(this.settings.countUpMaxMin);
+    if (!(maxMin > 0)) return false; // 0 = 不设上限（用户自己承担一直跑的后果）
+    if (elapsed < maxMin * 60 * 1000) return false;
+    this.stopCountUpAtLimit(maxMin);
+    return true;
+  }
+
+  /** 达到上限：停表 + 回到待开始 + 给用户可见提示（绝不能只 console.warn）。 */
+  stopCountUpAtLimit(maxMin) {
+    this.clearTicker();
+    this.countUp = false;
+    this.countUpBaseMs = 0;
+    this.countUpStartAt = 0;
+    this.state = ST.IDLE;
+    this.pendingState = null;
+    const label = maxMin >= 60
+      ? i18nT('k34d7423c', '{0} 小时', Math.round((maxMin / 60) * 100) / 100)
+      : i18nT('k4444fa5f', '{0} 分钟', maxMin);
+    new obsidian.Notice(
+      i18nT('k12099bc3',
+        '⏱ 正计时已达上限（{0}），已自动停止。本次时长不计入统计 —— 要继续请点「开始」重新计时。',
+        label)
+    );
+    this.playSound();
+    /*
+     * 立刻把「已停表」广播给其他窗口。
+     * 不写的话镜像要等到下一次心跳（最多 1 秒）才知道，期间仍显示旧的累计数字；
+     * 若它正好在此间接管，还会接着往上加。write 内部有 try/catch，不 await ——
+     * 免得把 tick 拖成异步（绝大多数场景根本没有第二个实例）。
+     */
+    if (this.sync) this.sync.write(false);
+    this.refreshUI();
+  }
+
+  /**
+   * 正计时的间隔提醒：每累加到 N 分钟的倍数就提醒一次（N=20 → 20/40/60…）。
+   *
+   * 与软目标的区别：软目标只响一次，这个是**持续**的节拍器。
+   * 用「已过时长除以间隔」的整数个数判断，而不是「又过了 N 分钟吗」——
+   * 后者在系统休眠、切后台被节流时会漏掉整拍，前者醒来后补上最新那一拍，
+   * 且不会把错过的每一拍都补发成一条通知。
+   */
+  checkCountUpInterval(elapsed) {
+    const every = Number(this.settings.countUpRemindEveryMin);
+    if (!(every > 0)) return; // 0 = 关
+    const step = every * 60 * 1000;
+    const n = Math.floor(elapsed / step);
+    if (n < 1 || n <= this.countUpRemindCount) return;
+    this.countUpRemindCount = n;
+    if (this.settings.notifyOnSegmentEnd) {
+      new obsidian.Notice(
+        i18nT('k755ee078', '⏱ 已专注 {0} 分钟（正计时仍在进行，要结束请点「跳过」）', n * every)
+      );
+    }
+    this.playSound();
+    // 同步提醒计数：否则镜像窗口拿到的是 0，接管后会把已经发过的那一拍再发一次
+    if (this.sync) this.sync.write(true);
+  }
+
+  /** 正计时的软目标：到点只提醒一次，不结束计时。 */
+  checkCountUpTarget(elapsed) {
+    const targetMin = Number(this.settings.countUpTargetMin);
+    if (!(targetMin > 0) || this.countUpNotified) return;
+    if (elapsed < targetMin * 60 * 1000) return;
+    this.countUpNotified = true;
+    if (this.settings.notifyOnSegmentEnd) {
+      new obsidian.Notice(`⏱ 已专注 ${targetMin} 分钟（正计时不自动结束，要结束请点「跳过」）`);
+    }
+    this.playSound();
+  }
+
+  segmentProgress() {
+    // 正计时没有总时长：设了软目标就按软目标画，没设就留空（画成满格会误导成"快结束了"）
+    if (this.countUp) {
+      const targetMin = Number(this.settings.countUpTargetMin);
+      if (!(targetMin > 0)) return 0;
+      return clamp(this.elapsedMs() / (targetMin * 60 * 1000), 0, 1);
+    }
+    if (!this.segmentTotalMs) return 0;
+    return clamp((this.segmentTotalMs - this.remainMs()) / this.segmentTotalMs, 0, 1);
+  }
+
+  /**
+   * 一段结束。
+   * skipped 为 true 表示手动跳过：不计入专注 / 休息时长，单独统计跳过次数。
+   */
+  onSegmentEnd(skipped) {
+    const finished = this.state;
+    const elapsed = this.countUp ? this.elapsedMs() : this.segmentTotalMs - this.remainMs();
+    this.clearTicker();
+
+    /*
+     * 正计时的「跳过」不等于「放弃」：它没有"没做完"这回事 ——
+     * 你什么时候停，这一段就是多长。所以跳过也照记时长，
+     * 只是不计入「跳过次数」（那个是给倒计时用的：没做完就撤）。
+     * 倒计时维持原样，避免把没做完的时间混进统计。
+     */
+    const countThis = !skipped || this.countUp;
+    if (countThis) {
+      if (finished === ST.FOCUS) this.focusedMs += elapsed;
+      else this.restMs += elapsed;
+      if (finished === ST.LONG) this.longBreaks += 1;
+
+      if (this.settings.notifyOnSegmentEnd) {
+        new obsidian.Notice(finished === ST.FOCUS ? '🍅 专注结束，休息一下' : '休息结束，开始专注');
+      }
+      this.playSound();
+    }
+
+    // 专注结束 → 短休息
+    if (finished === ST.FOCUS) {
+      if (skipped && !this.countUp) {
+        this.skippedFocus += 1;
+        // 这一轮的专注是被跳过的，后面休息走完也**不算完成一轮** ——
+        // 否则「跳过 4 次」和「认真做完 4 轮」在计数上完全一样，
+        // 长休息的触发节奏和「已完成 N 轮」都会失真。
+        // 正计时例外：它的跳过等于「到此为止」，时长照记，是正常完成。
+        this.focusSkippedThisCycle = true;
+      }
+      this.nextSegment(ST.SHORT);
+      return;
+    }
+
+    // 短休息结束 → 完成一轮
+    if (finished === ST.SHORT) {
+      if (skipped) this.skippedBreak += 1;
+      if (!this.focusSkippedThisCycle) this.completedCycles += 1;
+      this.focusSkippedThisCycle = false;
+      if (this.targetCycles && this.completedCycles >= this.targetCycles) {
+        this.finishSession();
+        return;
+      }
+      const interval = Math.max(1, this.settings.longBreakInterval);
+      // completedCycles 为 0 时不能取模判断：0 % 任何数都是 0，
+      // 会在「刚跳过专注、还没真正完成一轮」时误弹长休息询问。
+      const shouldAsk =
+        (this.completedCycles > 0 && this.completedCycles % interval === 0) ||
+        this.askAgainNextCycle;
+      this.askAgainNextCycle = false;
+      if (shouldAsk) this.askLongBreak();
+      else this.nextSegment(ST.FOCUS);
+      return;
+    }
+
+    // 长休息结束 → 按设置决定是否清零
+    if (skipped) this.skippedBreak += 1;
+    if (this.settings.resetAfterLongBreak) this.completedCycles = 0;
+    if (this.targetCycles && this.completedCycles >= this.targetCycles) {
+      this.finishSession();
+      return;
+    }
+    this.nextSegment(ST.FOCUS);
+  }
+
+  /** 流转到下一段：自动模式直接开始，手动模式停在待开始 */
+  nextSegment(state) {
+    if (this.settings.autoStartNext) {
+      if (state === ST.FOCUS) this.enterFocus();
+      else if (state === ST.LONG) this.enterLongBreak();
+      else this.enterShortBreak();
+    } else {
+      this.waitFor(state);
+    }
+  }
+
+  askLongBreak() {
+    this.refreshUI();
+    new AskLongBreakModal(
+      this.app,
+      this,
+      () => this.nextSegment(ST.LONG),
+      () => {
+        // 点了「继续专注」：按设置决定下一轮结束是否立刻再问
+        if (this.settings.declineBehavior === 'nextCycle') this.askAgainNextCycle = true;
+        this.nextSegment(ST.FOCUS);
+      }
+    ).open();
+  }
+
+  /**
+   * 切换正计时。
+   * 正在跑的那一段不改语义 —— 中途从倒计时切成正计时，显示的数字会从「剩余」
+   * 跳成「已过」，同一个数两种读法，足以让人以为计时坏了。所以只影响下一段。
+   */
+  toggleCountUp() {
+    const s = this.settings;
+    s.countUp = !(s.countUp === true);
+    this.plugin.saveSettings();
+    let msg = s.countUp
+      ? i18nT('kcb1d77a3', '正计时已开启：专注段不限时，从 0 往上累加，点「跳过」结束。')
+      : i18nT('k59469d2e', '正计时已关闭：专注段恢复为倒计时。');
+    if (this.state === ST.FOCUS || this.state === ST.PAUSED) {
+      msg += i18nT('ke1485b10', '当前段保持不变，下一段生效。');
+    }
+    new obsidian.Notice(msg);
+    // 界面上那个「正计时：开 / 关」按钮要跟着变，命令入口没有别的刷新时机
+    this.refreshUI();
+  }
+
+  /* ---------------- 暂停 ---------------- */
+
+  togglePause() {
+    this.ensureOwner();
+    if (this.state === ST.IDLE) {
+      this.openStart();
+      return;
+    }
+    if (this.state === ST.WAITING) {
+      this.startPending();
+      return;
+    }
+
+    if (this.state === ST.PAUSED) {
+      this.state = this.pausedFrom || ST.FOCUS;
+      this.endsAt = Date.now() + this.pausedRemainMs;
+      // 正计时：暂停期间不累加，恢复时以已累计时长为新基数继续往上走
+      if (this.countUp) {
+        this.countUpBaseMs = this.pausedRemainMs;
+        this.countUpStartAt = Date.now();
+      }
+      this.startTicker();
+      this.refreshUI();
+      return;
+    }
+
+    // 进入暂停
+    this.pausedFrom = this.state;
+    this.pausedRemainMs = this.remainMs();
+    this.state = ST.PAUSED;
+    this.pauseCount += 1;
+    this.totalPauses += 1;
+    this.clearTicker();
+    this.refreshUI();
+
+    // 暂停次数达标：询问是否重开本轮
+    if (this.pauseCount >= Math.max(1, this.settings.pauseThreshold)) {
+      this.askRestart();
+    }
+  }
+
+  askRestart() {
+    new AskRestartModal(
+      this.app,
+      this,
+      () => {
+        // 重新开始本轮：整段从头计时，已用时间作废
+        const from = this.pausedFrom || ST.FOCUS;
+        this.state = from;
+        this.endsAt = Date.now() + this.segmentTotalMs;
+        this.pauseCount = 0;
+        /*
+         * 正计时必须在这里归零 —— 它只认 countUpBaseMs / countUpStartAt，
+         * 不认 endsAt。漏了这两行的话，点「重新开始本轮」界面上毫无变化，
+         * 计时会接着暂停前的数字继续走，等于重置失效。
+         */
+        if (this.countUp) this.resetCountUpProgress();
+        this.startTicker();
+        this.refreshUI();
+      },
+      () => {
+        // 继续当前进度
+        const from = this.pausedFrom || ST.FOCUS;
+        this.state = from;
+        this.endsAt = Date.now() + this.pausedRemainMs;
+        this.pauseCount = 0;
+        /*
+         * 同上：正计时要以「暂停时的已过时长」为新起点。
+         * 不重置 countUpStartAt 的话，暂停期间流逝的时间会被算进专注时长。
+         */
+        if (this.countUp) {
+          this.countUpBaseMs = this.pausedRemainMs;
+          this.countUpStartAt = Date.now();
+        }
+        this.startTicker();
+        this.refreshUI();
+      }
+    ).open();
+  }
+
+  /** 把正计时的累计归零（重新开始本轮 / 会话结束时用） */
+  resetCountUpProgress() {
+    this.countUpBaseMs = 0;
+    this.countUpStartAt = Date.now();
+    this.countUpNotified = false;
+    this.countUpRemindCount = 0;
+  }
+
+  /* ---------------- 跳过 / 结束 ---------------- */
+
+  skip() {
+    this.ensureOwner();
+    if (this.state === ST.IDLE || this.state === ST.PAUSED) return;
+    if (this.state === ST.WAITING) {
+      // 手动模式下跳过待开始的段，跳到再下一段
+      const next = this.pendingState === ST.FOCUS ? ST.SHORT : ST.FOCUS;
+      this.onSegmentEndSkippedWaiting(next);
+      return;
+    }
+    this.onSegmentEnd(true);
+  }
+
+  /** 跳过待开始的段：不计入时长，只在跳过统计里体现 */
+  onSegmentEndSkippedWaiting(next) {
+    if (this.pendingState === ST.FOCUS) this.skippedFocus += 1;
+    else this.skippedBreak += 1;
+    this.nextSegment(next);
+  }
+
+  stop() {
+    this.ensureOwner();
+    if (this.state === ST.IDLE) return;
+
+    /*
+     * 已经确认归属：直接结束，保持「点了立刻生效」的手感。
+     * 绝大多数场景（浮窗 / 侧边栏，或独立窗口里本就是拥有者）走这一条。
+     */
+    if (this.ownerConfirmed) {
+      this.finishSession();
+      return;
+    }
+    /*
+     * 需要从镜像手里抢归属：必须**等到共享文件里确实写着自己**再结束。
+     * 否则对面仍认为自己是拥有者，这边结束记一次、那边到点再记一次 —— 笔记两条重复记录。
+     * 只有这一条路会晚一拍，而它只在独立窗口模式下出现；暂停、跳段不受影响。
+     */
+    this.ensureOwnerAsync().then(() => {
+      if (this.state !== ST.IDLE) this.finishSession();
+    });
+  }
+
+  /**
+   * 界面上的操作统一先走这里：谁最后点按钮，谁就成为拥有者。
+   *
+   * 特意做成同步：暂停 / 跳过这类按钮不能因为一次文件读写而延迟生效，
+   * 而且绝大多数场景（非独立窗口形态）根本不存在第二个实例，无需交接。
+   * 真正需要交接时，先用内存里最新的共享快照对齐，再异步确认归属。
+   */
+  ensureOwner() {
+    if (this.isSessionOwner && this.ownerConfirmed) return;
+    if (!this.sync || !this.sync.available) {
+      this.isSessionOwner = true;
+      this.ownerConfirmed = true;
+      return;
+    }
+    if (this.isSessionOwner) {
+      this.ownerConfirmed = true;
+      return;
+    }
+    // 镜像接管：以最近一次轮询到的共享状态为准，避免用落后的数字覆盖对方
+    this.sync.applyLastSeen();
+    this.isSessionOwner = true;
+    this.ownerConfirmed = false; // 确认前不推进段切换
+    this.startTicker();
+    this.sync.ensureOwner();
+  }
+
+  /**
+   * ensureOwner 的异步版：等到共享文件里确实写着自己，才算拿到归属。
+   * 只有「结束会话」需要它 —— 那是唯一会写进笔记的动作（见 stop）。
+   */
+  async ensureOwnerAsync() {
+    if (this.isSessionOwner && this.ownerConfirmed) return;
+    if (!this.sync || !this.sync.available) {
+      this.isSessionOwner = true;
+      this.ownerConfirmed = true;
+      return;
+    }
+    if (this.isSessionOwner) {
+      const ok = await this.sync.write(true);
+      this.ownerConfirmed = !!ok;
+      return;
+    }
+    this.sync.applyLastSeen();
+    this.isSessionOwner = true;
+    this.ownerConfirmed = false;
+    this.startTicker();
+    await this.sync.ensureOwner();
+  }
+
+  /**
+   * 归零运行时状态。只清数字，不弹窗、不记录、不动归属。
+   * finishSession 与「被别的窗口顶替后归位」共用这一份，避免两处各清一半。
+   */
+  resetRuntime() {
+    this.clearTicker();
+    this.state = ST.IDLE;
+    this.pendingState = null;
+    this.completedCycles = 0;
+    this.focusedMs = 0;
+    this.restMs = 0;
+    this.longBreaks = 0;
+    this.skippedFocus = 0;
+    this.skippedBreak = 0;
+    this.focusSkippedThisCycle = false; // 本轮专注是否被跳过（跳过则不计入轮次）
+    this.pauseCount = 0;
+    this.totalPauses = 0;
+    this.targetCycles = null;
+    this.sessionStart = null;
+    // 正计时的累计状态一并归零：留着旧起点会让下一段的已过时长从一个陈旧数字起步
+    this.resetCountUpProgress();
+    /* countUp 本身也要归 false。它是运行时状态（下一段开始时按设置重算，见 startSegment），
+     * 留着 true 会让退场的镜像窗口在「已 idle」的状态下仍带着正计时标记，
+     * 一旦它被别的窗口读到就成了脏数据。 */
+    this.countUp = false;
+  }
+
+  /**
+   * 结束会话前，把「还在跑的那一段」结进统计。
+   *
+   * 只有正计时需要这一下：它不会自然结束，唯一的收尾动作就是手动点「结束」，
+   * 不在这里结一次的话，正计时的专注时长永远是 0（小结里显示 0 分钟）。
+   * 倒计时保持原样 —— 中途放弃＝这一段没做完，本来就不该算进去。
+   */
+  settleRunningSegment() {
+    if (!this.countUp) return;
+    if (this.state === ST.IDLE || this.state === ST.WAITING) return;
+    // 暂停中：段类别看暂停前的那一段
+    const st = this.state === ST.PAUSED ? this.pausedFrom || ST.FOCUS : this.state;
+    const elapsed = this.elapsedMs();
+    if (st === ST.FOCUS) this.focusedMs += elapsed;
+    else this.restMs += elapsed;
+    if (st === ST.LONG) this.longBreaks += 1;
+    this.resetCountUpProgress();
+  }
+
+  /**
+   * 从会话里退场：别的窗口已经结束了会话，或自己已被顶替，本实例不再参与。
+   *
+   * 关键在**不弹小结、不写笔记** —— 小结只在真正推进到结束的那一方弹，
+   * 否则同一个会话会在两个窗口各弹一次、各记一条，笔记里出现重复记录。
+   */
+  retireFromSession() {
+    if (this.state === ST.IDLE) return;
+    this.resetRuntime();
+    this.isSessionOwner = false;
+    this.ownerConfirmed = false;
+    // 清掉同步侧的记忆，否则下一轮轮询会误判成「又结束了一次」而反复归位
+    if (this.sync) this.sync.lastSeen = null;
+    if (this.floatUI) this.floatUI.hide();
+    this.refreshUI();
+  }
+
+  /** 结束会话：归零运行时状态并弹出小结（记录由弹窗关闭时触发） */
+  finishSession() {
+    this.settleRunningSegment();
+    const now = Date.now();
+    const fmt = (ts) => obsidian.moment(ts).format('HH:mm');
+    const data = {
+      cycles: this.completedCycles,
+      focusMin: Math.round(this.focusedMs / 60000),
+      restMin: Math.round(this.restMs / 60000),
+      longBreaks: this.longBreaks,
+      skippedFocus: this.skippedFocus,
+      skippedBreak: this.skippedBreak,
+      pauses: this.totalPauses,
+      range: this.sessionStart ? `${fmt(this.sessionStart)} – ${fmt(now)}` : '',
+      date: obsidian.moment(now).format('YYYY-MM-DD'),
+      time: obsidian.moment(now).format('HH:mm'),
+      profileName: this.activeProfile ? this.activeProfile.name : '',
+      /*
+       * 记录精度：recordSeconds 关闭（默认）按分钟，打开记到秒。
+       * focusMin / restMin 始终是整数分钟，供已有模板的 {{focus}} / {{rest}} 使用，
+       * 语义一个字没改；精度只反映在 focusText / restText 与一句话摘要上 ——
+       * 改 {{focus}} 的语义会让老模板写出「专注 25 分钟分钟」。
+       */
+      recordSeconds: this.plugin && this.plugin.settings.record
+        ? this.plugin.settings.record.recordSeconds === true
+        : false,
+    };
+    const toSec = data.recordSeconds;
+    data.focusText = fmtRecordDuration(this.focusedMs, toSec);
+    data.restText = fmtRecordDuration(this.restMs, toSec);
+
+    /*
+     * 累计统计：必须在 resetRuntime() 之前取 focusedMs —— 之后就被清零了。
+     * 只有数据源选「本机累计」时才写；选「解析笔记」由统计命令现读，不落盘。
+     * 失败不影响会话结束，统计是附属功能。
+     */
+    try {
+      if (this.plugin && this.plugin.settings) {
+        accumulateStats(this.plugin.settings, this.focusedMs);
+      }
+    } catch (e) { /* 统计失败不该让会话结束不了 */ }
+
+    this.resetRuntime();
+    // 会话结束：归属解除，下一个开始者重新抢占
+    this.isSessionOwner = true;
+    this.ownerConfirmed = true;
+    this.endedLocally = true; // 标记「共享文件是我清的」，让对面的窗口跟着归位
+    if (this.sync) this.sync.clear();
+    this.refreshUI();
+
+    if (this.floatUI) this.floatUI.hide();
+
+    // 自动记录交给弹窗关闭时执行：
+    // 若在这里 await，QuickAdd 弹出输入框会把本弹窗一直堵住，看起来像卡死。
+    new SummaryModal(this.app, this, data).open();
+  }
+
+  /* ---------------- 音效 ---------------- */
+
+  /** 单个目录内挑出音频文件（不递归） */
+  async listAudioIn(folder, adapter) {
+    const listing = await adapter.list(normalizePath(folder));
+    return (listing.files || [])
+      .filter((f) => AUDIO_EXT.includes(f.split('.').pop().toLowerCase()))
+      .sort();
+  }
+
+  /**
+   * 扫描自定义音效文件夹，缓存音频文件路径。
+   * 递归子目录，音频可按类型分文件夹存放。
+   * 目录层级过深时会自动停止，避免异常配置把界面卡住。
+   */
+  async refreshSoundFiles() {
+    this.soundFiles = [];
+    const folder = normalizePath(this.settings.soundFolder);
+    if (!folder) return;
+
+    try {
+      const adapter = this.app.vault.adapter;
+      if (!adapter || typeof adapter.list !== 'function') return;
+
+      const found = [];
+      const visited = new Set();
+      const queue = [folder];
+      const MAX_DEPTH = 4;
+
+      while (queue.length) {
+        const cur = queue.shift();
+        const depth = cur.split('/').length;
+        if (visited.has(cur) || depth > MAX_DEPTH) continue;
+        visited.add(cur);
+
+        let listing;
+        try {
+          listing = await adapter.list(normalizePath(cur));
+        } catch (e) {
+          continue; // 单个目录读不到就跳过，不影响其他目录
+        }
+
+        found.push(...(await this.listAudioIn(cur, adapter)));
+        (listing.folders || []).forEach((sub) => queue.push(sub));
+      }
+
+      this.soundFiles = found.sort();
+    } catch (e) {
+      this.soundFiles = [];
+    }
+  }
+
+  /** 播放提示音：优先自定义文件夹，取不到时回退内置合成音 */
+  async playSound() {
+    if (!this.settings.soundEnabled) return;
+
+    if (this.settings.soundSource === 'folder') {
+      if (this.soundFiles.length === 0) await this.refreshSoundFiles();
+      if (this.soundFiles.length > 0) {
+        // 按顺序轮播，避免每次都是同一个音
+        const file = this.soundFiles[this.soundIndex % this.soundFiles.length];
+        this.soundIndex += 1;
+        try {
+          const url = this.app.vault.adapter.getResourcePath(file);
+          const audio = new Audio(url);
+          audio.play().catch(() => this.beep());
+          return;
+        } catch (e) {
+          /* 落到内置音 */
+        }
+      }
+    }
+    this.beep();
+  }
+
+  /** 内置提示音：系统合成，不依赖任何音频文件 */
+  beep() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 660;
+      gain.gain.value = 0.05;
+      osc.start();
+      osc.stop(ctx.currentTime + 0.15);
+      setTimeout(() => ctx.close(), 400);
+    } catch (e) {
+      /* 音频不可用时静默降级 */
+    }
+  }
+
+  refreshUI() {
+    if (this.floatUI) this.floatUI.update();
+    this.app.workspace.getLeavesOfType(POMODORO_VIEW_TYPE).forEach((leaf) => {
+      if (leaf.view instanceof PomodoroView) leaf.view.update();
+    });
+    if (this.statusBar) {
+      this.statusBar.setText(this.state === ST.IDLE ? '🍅' : `🍅 ${this.displayTime()}`);
+    }
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * 番茄钟设置内容：由统一设置页按标签渲染
+ * ------------------------------------------------------------------ */
+
+/**
+ * 桌面常驻开启后，把界面从设置页切回笔记视图并显示浮窗。
+ *
+ * 为什么必须有这一步：开关就摆在设置页里，开启后主窗口立刻缩到 365×378，
+ * 要是还停在设置页，用户看到的就是"一个被缩小的设置窗口"——
+ * 设置没法继续点，番茄钟也看不到，整个功能像是把界面搞坏了。
+ * 所以开启时要主动离开设置页、切到笔记、把浮窗亮出来。
+ *
+ * 全程 try/catch：切视图只是体验优化，切不动不影响窗口已经缩小，
+ * 绝不能因为它失败就让整个开关回滚。
+ *
+ * @returns {boolean} 是否成功离开了设置页
+ */
+/**
+ * DOM 兜底：直接点设置模态框的关闭按钮。
+ *
+ * 为什么必须有：app.setting.close() 是内部 API，typeof 只能挡住"不存在"，
+ * 挡不住"存在却没生效"—— 而设置窗口是盖在主窗口上的**模态框**，
+ * setActiveLeaf 只切后台叶子、根本不会关它。
+ * 于是开关点了、窗口也缩小了，用户看到的仍是「一个被缩小的设置页」，
+ * 功能像是坏了（v2.97 实测现象）。
+ *
+ * 只在确认是设置窗口时才点：优先 .mod-settings。兜底到 .modal-container 是
+ * 因为此时刚从本插件设置页的开关进来，唯一可能开着的模态框就是它，
+ * 不会误关插件自己弹的确认框。
+ */
+function clickSettingsClose(doc) {
+  const d = doc || (typeof document !== 'undefined' ? document : null);
+  if (!d || typeof d.querySelector !== 'function') return false;
+  try {
+    const modal =
+      d.querySelector('.modal-container .modal.mod-settings') ||
+      d.querySelector('.modal.mod-settings') ||
+      d.querySelector('.modal-container') ||
+      null;
+    if (!modal) return false;
+    const btn = modal.querySelector('.modal-close-button');
+    if (btn && typeof btn.click === 'function') {
+      btn.click();
+      return true;
+    }
+  } catch (e) {
+    /* 找不到就不点 */
+  }
+  return false;
+}
+
+function leaveSettingsForDock(plugin, ctrl) {
+  const app = plugin && plugin.app;
+  let moved = false;
+  try {
+    const st = app && app.setting;
+    if (st && typeof st.close === 'function') {
+      st.close();
+      moved = true;
+    }
+  } catch (e) {
+    /* 关不掉就靠下面切叶子 */
+  }
+  // 内部 API 存在不等于关掉了，再用 DOM 点一次兜底
+  if (clickSettingsClose()) moved = true;
+  try {
+    const ws = app && app.workspace;
+    if (ws && typeof ws.getLeavesOfType === 'function') {
+      const leaves = ws.getLeavesOfType('markdown') || [];
+      const target =
+        leaves[0] ||
+        (typeof ws.getMostRecentLeaf === 'function' ? ws.getMostRecentLeaf() : null);
+      if (target && typeof ws.setActiveLeaf === 'function') {
+        ws.setActiveLeaf(target, { focus: true });
+        moved = true;
+      }
+    }
+  } catch (e) {
+    /* 切不动不影响窗口已经缩小 */
+  }
+  try {
+    if (ctrl && ctrl.floatUI && typeof ctrl.floatUI.show === 'function') ctrl.floatUI.show();
+  } catch (e) {
+    /* 浮窗显示不出来也不算失败 */
+  }
+  return moved;
+}
+
+/** 分钟输入 + 软提示（只提示，不阻止） */
+function minuteSetting(containerEl, plugin, ctrl, name, desc, key, hintFn) {
+  const s = ctrl.settings;
+  /*
+   * 实参是变量，i18nguard 扫不到（它只认字面量/三元/模板串/转义），
+   * 必须在**函数内部**包 —— 调用处传的是字面量，但守卫只扫 setXxx( 扫不到调用点。
+   * key 依次为 focusMin / shortBreakMin / longBreakMin。
+   */
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('pomo.min.' + key + '.name', name))
+    .setDesc(i18nT('pomo.min.' + key + '.desc', desc))
+    .addText((t) =>
+      t
+        .setPlaceholder(String(s[key]))
+        .setValue(String(s[key]))
+        .onChange(async (v) => {
+          const n = parseInt(v, 10);
+          if (isFinite(n) && n > 0) {
+            s[key] = n;
+            ctrl.syncProfile(); // 把改动写回当前方案
+            await plugin.saveSettings();
+          }
+          if (hintEl) hintEl.setText(hintFn(s[key]));
+        })
+    );
+
+  let hintEl = null;
+  if (s.showHints) {
+    hintEl = containerEl.createDiv({ cls: 'pomo-hint' });
+    hintEl.setText(hintFn(s[key]));
+  }
+}
+
+function renderPomodoroSettings(containerEl, plugin, ctrl) {
+  const s = ctrl.settings;
+  containerEl.createEl('h2', { text: i18nT('k7f378cec', '番茄钟') });
+
+  /* ---- 时长方案 ---- */
+  containerEl.createEl('h3', { text: i18nT('ke697bb8b', '时长方案') });
+  containerEl.createDiv({
+    cls: 'pomo-tip',
+    text: i18nT('kce1fe81f', '按场景分组保存专注 / 休息时长，开始番茄钟时可任选一套。'),
+  });
+
+  // 方案选择 + 新建 / 删除
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('kce717abb', '当前方案'))
+    .setDesc(i18nT('kf099c7bc', '切换后下面的时长会跟着变。'))
+    .addDropdown((d) => {
+      s.profiles.forEach((p) => d.addOption(p.id, p.name));
+      d.setValue(s.activeProfileId).onChange(async (v) => {
+        applyProfile(plugin.settings, v);
+        await plugin.saveSettings();
+        plugin.redrawSettingsTab();
+      });
+    })
+    .addButton((b) =>
+      b.setButtonText(i18nT('k26bb8418', '新建')).onClick(async () => {
+        const p = {
+          id: makeProfileId(),
+          name: '新方案',
+          focusMin: s.focusMin,
+          shortBreakMin: s.shortBreakMin,
+          longBreakMin: s.longBreakMin,
+        };
+        s.profiles.push(p);
+        applyProfile(plugin.settings, p.id);
+        await plugin.saveSettings();
+        plugin.redrawSettingsTab();
+      })
+    )
+    .addButton((b) =>
+      b.setButtonText(i18nT('k2f4aaddd', '删除')).onClick(async () => {
+        if (s.profiles.length <= 1) {
+          new obsidian.Notice('至少保留一个方案');
+          return;
+        }
+        s.profiles = s.profiles.filter((p) => p.id !== s.activeProfileId);
+        applyProfile(plugin.settings, s.profiles[0].id);
+        await plugin.saveSettings();
+        plugin.redrawSettingsTab();
+      })
+    );
+
+  // 方案名与三项时长，编辑即写回当前方案
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k1b0b239b', '方案名称'))
+    .setDesc(i18nT('k87873bc7', '例如：工作、学习、阅读。'))
+    .addText((t) =>
+      t
+        .setPlaceholder(i18nT('k1b0b239b', '方案名称'))
+        .setValue(ctrl.activeProfile ? ctrl.activeProfile.name : '')
+        .onChange(async (v) => {
+          const name = v.trim();
+          if (!name) return;
+          ctrl.syncProfile({ name });
+          await plugin.saveSettings();
+        })
+    );
+
+  minuteSetting(containerEl, plugin, ctrl, '专注时长', '当前方案的专注时长。', 'focusMin', (v) =>
+    v > 45 ? '专注时长偏长，注意中途休息。' : ''
+  );
+  minuteSetting(containerEl, plugin, ctrl, '短休息时长', '当前方案每轮后的休息时长。', 'shortBreakMin', (v) =>
+    v < 3 ? '休息太短可能恢复不足。' : ''
+  );
+  minuteSetting(
+    containerEl,
+    plugin,
+    ctrl,
+    '长休息时长',
+    '当前方案每若干轮后的长休息时长。',
+    'longBreakMin',
+    () => ''
+  );
+
+  /* ---- 正计时 ---- */
+  containerEl.createEl('h3', { text: i18nT('k08780ced', '正计时') });
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k4bd2ddba', '正计时（专注段不限时）'))
+    .setDesc(i18nT('k73559598', "开启后，专注段从 0 往上累加、不会自动结束 —— 由你点「跳过」或结束会话来停。适合统计一件事实际花了多久。只对专注段生效，休息段仍按上面设定的时长倒计时。也可以点「开始」后，在「准备开始」面板上一键切换，或在待开始界面点那个 ＋/－ 按钮。"))
+    .addToggle((t) =>
+      t.setValue(s.countUp === true).onChange(async (v) => {
+        s.countUp = v;
+        await plugin.saveSettings();
+      })
+    );
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('kefa6408b', '正计时软目标（分钟）'))
+    .setDesc(i18nT('k2e64366c', '累加到这么多分钟时弹一次提醒并响铃，但不结束计时。填 0 表示不提醒。需先开启正计时。'))
+    .addText((t) =>
+      t
+        .setPlaceholder('0')
+        .setValue(String(s.countUpTargetMin))
+        .onChange(async (v) => {
+          const n = parseInt(v, 10);
+          s.countUpTargetMin = isFinite(n) && n > 0 ? n : 0;
+          await plugin.saveSettings();
+        })
+    );
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('kec5bbff6', '正计时上限（分钟）'))
+    .setDesc(i18nT('k48571ed9', "累加到这么多分钟就**自动停表**，并弹提示让你重新开始 —— 防止忘了停而一直跑下去。达到上限的那一段**不计入专注时长**（超时数据不可信）。默认 1440（24 小时），填 0 表示不设上限。"))
+    .addText((t) =>
+      t
+        .setPlaceholder('1440')
+        .setValue(String(s.countUpMaxMin))
+        .onChange(async (v) => {
+          const n = parseInt(v, 10);
+          s.countUpMaxMin = isFinite(n) && n > 0 ? n : 0;
+          await plugin.saveSettings();
+        })
+    );
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('kd84df1fb', '正计时间隔提醒（分钟）'))
+    .setDesc(i18nT('k8e9e461e', "每隔这么多分钟提醒一次：填 20 就是第 20、40、60 分钟各提醒一次（只提醒，不结束计时）。与「软目标」的区别是**这个是持续的节拍器**，软目标只响一次。填 0 表示不提醒。需先开启正计时。"))
+    .addText((t) =>
+      t
+        .setPlaceholder('0')
+        .setValue(String(s.countUpRemindEveryMin))
+        .onChange(async (v) => {
+          const n = parseInt(v, 10);
+          s.countUpRemindEveryMin = isFinite(n) && n > 0 ? n : 0;
+          await plugin.saveSettings();
+        })
+    );
+
+  /*
+   * 数据源下拉 + 「自定义统计位置」是一对：后者只在选中「自定义位置」时才展出，
+   * 其余时候收起 —— 四个数据源里只有它需要填路径，常驻只会占着版面、
+   * 让人误以为不填也能读。切下拉时同步显示/隐藏，不改值。
+   */
+  let customPathSetting = null;
+  const showCustomPath = () => {
+    if (customPathSetting && customPathSetting.settingEl) {
+      customPathSetting.settingEl.style.display = s.statsSource === 'custom' ? '' : 'none';
+    }
+  };
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k6611323b', '累计统计数据源'))
+    .setDesc(i18nT('kc481bba7', "决定「番茄钟：查看累计统计」这个命令从哪里读数。默认「不统计」（不存任何数据）。· 本机累计：插件自己记账，精确，但换设备或清配置会丢。· 解析笔记：现读你写的会话记录笔记，持久，但改过写入格式就会读不准。· 自定义位置：读你下面指定的笔记或文件夹。"))
+    .addDropdown((d) =>
+      d
+        .addOption('off', i18nT('k942aa988', '不统计（默认）'))
+        .addOption('memory', i18nT('k0e03b3a4', '本机累计'))
+        .addOption('note', i18nT('k640e8fc2', '解析笔记（番茄钟记录笔记）'))
+        .addOption('custom', i18nT('kfae3782a', '自定义位置（指定笔记或文件夹）'))
+        .setValue(String(s.statsSource || 'off'))
+        .onChange(async (v) => {
+          s.statsSource = v;
+          showCustomPath();
+          await plugin.saveSettings();
+        })
+    );
+
+  customPathSetting = new obsidian.Setting(containerEl)
+    .setName(i18nT('k155b1220', '自定义统计位置'))
+    .setDesc(i18nT('kfd612adc', "数据源选「自定义位置」时从这里读数（选其它数据源时本项收起）。可填一篇笔记（如 统计/专注.md）或一个文件夹（如 统计），文件夹会统计其下所有 .md。留空则不统计。路径填错会明确提示「没读到」，不会静默给 0。"))
+    .addText((t) =>
+      t
+        .setPlaceholder(i18nT('kbb8c44f9', '例如：统计/专注.md 或 统计'))
+        .setValue(String(s.statsCustomPath || ''))
+        .onChange(async (v) => {
+          s.statsCustomPath = String(v || '').trim();
+          await plugin.saveSettings();
+        })
+    );
+  showCustomPath();
+
+  /* ---- DataView 联动（总开关，默认关）---- */
+  /*
+   * 开关开着却没装 DataView 时，字段照样写进笔记、但用户查不到，
+   * 他不知道是插件没装，只会觉得这功能没用 —— 所以给一行可见状态。
+   * 照 note.js 里 Templater 状态的写法（ok 常色 / 不 ok 黄字），
+   * 不弹 Notice：用户是主动来开这个开关的，不必每次写笔记都打扰。
+   */
+  const dvHead = containerEl.createDiv({ cls: 'tt-dv-status' });
+  const showDvStatus = () => {
+    try {
+      const on = s.dataviewEnabled === true;
+      dvHead.removeClass('is-warn');
+      if (!on) {
+        dvHead.setText('');
+        dvHead.style.display = 'none';
+        return;
+      }
+      dvHead.style.display = '';
+      const dvOk = hasDataview(plugin.app);
+      dvHead.setText(
+        dvOk
+          ? i18nT('kc13cb9a1', 'DataView：已就绪。')
+          : i18nT('kc2413656', 'DataView：未检测到插件，字段仍会写入，但需安装后才能查询。')
+      );
+      if (!dvOk) dvHead.addClass('is-warn');
+    } catch (e) {
+      console.warn('[Time Tools] DataView 状态检测失败', e);
+    }
+  };
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k8e3f14cd', 'DataView 联动'))
+    .setDesc(i18nT('ke50d90ae', "默认关。开启后写会话记录时，按下面的字段表在末尾追加 DataView 内联字段，供你自己写的 dataview 查询读取。关着时一个字都不多写，不影响既有笔记。需要你已安装 DataView 插件才能查询。"))
+    .addToggle((g) =>
+      g.setValue(s.dataviewEnabled === true).onChange(async (v) => {
+        s.dataviewEnabled = v === true;
+        showDvStatus();
+        await plugin.saveSettings();
+      })
+    );
+  showDvStatus();
+
+  /*
+   * DataView 字段表：一行一个字段，左边是字段名、右边是变量。
+   * 默认只写「专注时长」，其余由用户自己加行 —— 他要记什么不该由插件替他决定，
+   * 全写上去反而会让记录行变长、且大部分字段没人用。
+   */
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('kc7bde7ac', 'DataView 字段表'))
+    .setDesc(i18nT('k6ddd4a9b', "一行一个字段，格式：字段名::{{VALUE:变量名}}。专注时长默认记录，其余自己加行；字段名可以随便改（含专注时长）。清空则一行都不写。可用变量：date 日期、time 时间、range 时段、cycles 轮数、focus 专注分钟数、rest 休息分钟数、focusText 专注时长（带单位，跟随「记录到秒」）、restText 休息时长、pauses 暂停次数、longBreaks 长休息次数、skippedFocus 跳过专注次数、skippedBreak 跳过休息次数、profile 方案名。"))
+    .addTextArea((t) =>
+      t
+        .setPlaceholder(i18nT('ka6762c3b', '专注时长::{{VALUE:focusText}}'))
+        .setValue(String(s.dataviewFields == null ? '' : s.dataviewFields))
+        .onChange(async (v) => {
+          s.dataviewFields = String(v == null ? '' : v);
+          await plugin.saveSettings();
+        })
+    );
+
+  /* ---- 节奏 ---- */
+  containerEl.createEl('h3', { text: i18nT('ke93ed83e', '节奏') });
+  /*
+   * 下面这几项是**全局**的，不属于某个方案：切换方案时三项时长会跟着变，
+   * 但它们保持原值。不写清楚的话，用户改完方案会发现"我设的节奏没跟着来"，
+   * 以为设置没保存。
+   */
+  containerEl.createDiv({
+    cls: 'pomo-tip',
+    text: i18nT('k48da131d', '以下节奏设置是全局的，不随方案切换 —— 切方案只会改变上面三项时长。'),
+  });
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k61ec67be', '长休息间隔'))
+    .setDesc(i18nT('k8f75ce4f', '完成这么多轮后弹窗询问是否进入长休息（全局，不随方案切换）。'))
+    .addText((t) =>
+      t
+        .setPlaceholder('4')
+        .setValue(String(s.longBreakInterval))
+        .onChange(async (v) => {
+          const n = parseInt(v, 10);
+          s.longBreakInterval = isFinite(n) && n > 0 ? n : 4;
+          await plugin.saveSettings();
+        })
+    );
+
+  // 自动 / 手动模式
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k76bdc67a', '自动开始下一段'))
+    .setDesc(i18nT('kd0b0fdcf', '开启后专注结束自动进入休息；关闭为手动模式，需点「开始休息」才继续。'))
+    .addToggle((t) =>
+      t.setValue(s.autoStartNext).onChange(async (v) => {
+        s.autoStartNext = v;
+        await plugin.saveSettings();
+      })
+    );
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k54a618fd', '长休息后计数'))
+    .setDesc(i18nT('k039ed8fa', '清零则重新数第 1 轮；继续累加则沿用累计轮数。'))
+    .addDropdown((d) =>
+      d
+        .addOption('reset', i18nT('ke7b5aad7', '清零'))
+        .addOption('keep', i18nT('ka0e20f38', '继续累加'))
+        .setValue(s.resetAfterLongBreak ? 'reset' : 'keep')
+        .onChange(async (v) => {
+          s.resetAfterLongBreak = v === 'reset';
+          await plugin.saveSettings();
+        })
+    );
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k59b19be2', '拒绝长休息后'))
+    .setDesc(i18nT('kfad59e29', '点了「继续专注」之后，什么时候再问一次。'))
+    .addDropdown((d) =>
+      d
+        .addOption('afterInterval', i18nT('k2d984763', '再跑满一个间隔才问'))
+        .addOption('nextCycle', i18nT('k72079e1a', '下一轮结束立刻再问'))
+        .setValue(s.declineBehavior)
+        .onChange(async (v) => {
+          s.declineBehavior = v;
+          await plugin.saveSettings();
+        })
+    );
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('kaf1afec7', '暂停提示阈值'))
+    .setDesc(i18nT('k9168d517', '一段内暂停达这个次数后，弹窗询问是否从本轮重新开始。'))
+    .addText((t) =>
+      t
+        .setPlaceholder('3')
+        .setValue(String(s.pauseThreshold))
+        .onChange(async (v) => {
+          const n = parseInt(v, 10);
+          s.pauseThreshold = isFinite(n) && n > 0 ? n : 3;
+          await plugin.saveSettings();
+        })
+    );
+
+  /* ---- 界面 ---- */
+  containerEl.createEl('h3', { text: i18nT('k0196846b', '界面') });
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k813152a2', '界面形态'))
+    .setDesc(i18nT('kfb12cd83', "浮窗可拖动；侧边栏固定在右侧面板；独立窗口在 Obsidian 之外另开系统窗口，主窗口最小化后照样计时。移动端不支持独立窗口，始终用侧边栏。"))
+    .addDropdown((d) =>
+      d
+        .addOption('floating', i18nT('k71c0319f', '浮窗'))
+        .addOption('sidebar', i18nT('k9635b9bd', '侧边栏视图'))
+        .addOption('popout', i18nT('k2b02bedb', '独立窗口'))
+        .setValue(s.uiMode)
+        .onChange(async (v) => {
+          s.uiMode = v;
+          await plugin.saveSettings();
+          // 离开浮窗就把它彻底销毁，避免 DOM 残留在 body 上
+          if (v !== 'floating' && ctrl.floatUI) {
+            ctrl.floatUI.destroy();
+            ctrl.floatUI = null;
+          }
+          // 只有独立窗口需要跨窗口同步，其余形态不开轮询
+          if (ctrl.sync) {
+            if (ctrl.isPopoutMode) ctrl.sync.startPolling();
+            else ctrl.sync.stopPolling();
+          }
+        })
+    );
+
+  if (s.uiMode === 'popout') {
+    new obsidian.Setting(containerEl)
+      .setName(i18nT('k597abe50', '窗口宽度'))
+      .setDesc(i18nT('k960865cc', '像素。留空或 0 交给系统决定。'))
+      .addText((t) =>
+        t
+          .setPlaceholder('616')
+          .setValue(String(s.popoutWidth || 0))
+          .onChange(async (v) => {
+            s.popoutWidth = Math.max(0, Math.round(Number(v) || 0));
+            await plugin.saveSettings();
+          })
+      );
+
+    new obsidian.Setting(containerEl)
+      .setName(i18nT('k019594cc', '窗口高度'))
+      .setDesc(i18nT('k85045476', '同上。Electron 窗口接口可用时精确生效，否则只是建议值。'))
+      .addText((t) =>
+        t
+          .setPlaceholder('406')
+          .setValue(String(s.popoutHeight || 0))
+          .onChange(async (v) => {
+            s.popoutHeight = Math.max(0, Math.round(Number(v) || 0));
+            await plugin.saveSettings();
+          })
+      );
+
+    new obsidian.Setting(containerEl)
+      .setName(i18nT('k357b1d03', '开窗位置'))
+      .setDesc(i18nT('k23dd67f6', "放到屏幕哪个角（已避开任务栏）；选「交给系统决定」则完全不干预。位置只在开窗那一刻设置一次，之后手动拖动不会被拉回。"))
+      .addDropdown((d) => {
+        POPOUT_POS_OPTIONS.forEach((o) => d.addOption(o[0], optText('popoutPos', o[0], o[1])));
+        d.setValue(s.popoutPos).onChange(async (v) => {
+          s.popoutPos = v;
+          await plugin.saveSettings();
+        });
+      });
+
+    new obsidian.Setting(containerEl)
+      .setName(i18nT('kc367a5c6', '始终显示在其他窗口之上'))
+      .setDesc(i18nT('k6aef237a', "让番茄钟浮在所有应用前面。依赖系统窗口接口，不可用时静默失效（窗口照常打开，只是不置顶）。"))
+      .addToggle((t) =>
+        t.setValue(s.popoutAlwaysOnTop !== false).onChange(async (v) => {
+          s.popoutAlwaysOnTop = v;
+          await plugin.saveSettings();
+        })
+      );
+
+    new obsidian.Setting(containerEl)
+      .setName(i18nT('k18b8cdb4', '隐藏窗口内部界面元素（不是无边框）'))
+      .setDesc(i18nT('k5fa62f08', "真正的无边框做不到：窗口最外那条边框与顶部标题栏由系统绘制，Electron 只能在建窗那一刻决定是否要它，而 pop-out 是 Obsidian 建的，插件改不了已存在的窗口 —— 它们一定会显示，这不是 bug。本开关只隐藏窗口**内部**的 Obsidian 界面元素：标签栏、状态栏、左侧图标栏、左右侧边栏，让番茄钟铺满内容区。想要真正贴边的小窗，请用下面的「桌面常驻」。"))
+      .addToggle((t) =>
+        t.setValue(!!s.popoutBorderless).onChange(async (v) => {
+          s.popoutBorderless = v;
+          await plugin.saveSettings();
+        })
+      );
+
+    containerEl.createDiv({
+      cls: 'pomo-tip',
+      text:
+        i18nT('ka410bd01',
+          '独立窗口里能改的和改不了的：' +
+          '① 能改 —— 配色、字号、圆角、阴影、背景图、按钮位置与顺序，' +
+          '和浮窗用的是同一套变量，改一处两边都生效；' +
+          '② 有条件 —— 尺寸、位置、置顶依赖 Electron 窗口接口，' +
+          'Obsidian 收紧该接口时会退化为「系统决定」，不会报错；' +
+          '③ 改不了 —— 系统标题栏与窗口外框样式（frame 只能建窗时指定）；' +
+          '④ 注意 —— 以上都在开窗那一刻应用一次。改完设置不必重开窗口：' +
+          '在独立窗口里按 Ctrl+P 运行「番茄钟：重新应用独立窗口设置」即可当场生效' +
+          '（必须在该窗口里运行 —— 每个窗口用的是自己加载时读到的那份设置）。'),
+    });
+  }
+
+  /*
+   * 桌面常驻（替代方案）：独立窗口去不掉系统标题栏，达不到「桌上一个无边框番茄钟」，
+   * 于是反过来 —— 把 Obsidian 主窗口本身缩成番茄钟大小、置顶、摆到屏幕角上，
+   * 番茄钟用浮窗显示在窗口内左上角。观感上接近常驻，且**真能置顶、真能贴边**。
+   */
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k73ce778c', '桌面常驻（缩小主窗口）'))
+    .setDesc(i18nT('ka327d21d', "把主窗口缩到番茄钟大小、置顶、摆到屏幕角上，番茄钟用浮窗显示在窗口内 —— 这是「独立窗口去不掉系统标题栏」的替代方案。注意：开启后主窗口就只有这么大，正常笔记操作会受影响；关闭开关（或再运行一次命令）会还原成原来的大小和位置。需配合「界面形态 = 浮窗」；开启后会自动离开设置页、切回笔记界面。"))
+    .addToggle((t) =>
+      t.setValue(!!s.deskDock).onChange(async (v) => {
+        const r = applyDeskDock(v, s);
+        s.deskDock = r.ok ? v : !!s.deskDock;
+        const left = r.ok && v ? leaveSettingsForDock(plugin, ctrl) : true;
+        await plugin.saveSettings();
+        let msg;
+        if (r.reason === 'no-electron') {
+          msg = '当前环境不支持窗口控制，桌面常驻未生效';
+        } else if (v) {
+          msg = r.ok
+            ? '桌面常驻已开启：主窗口已缩小并置顶' +
+              (s.uiMode === 'floating' ? '' : '（当前界面形态不是浮窗，小窗里看不到番茄钟）') +
+              (left ? '' : '（没能自动离开设置页，请手动关掉）')
+            : '桌面常驻开启失败，主窗口未改动';
+        } else {
+          msg = r.restored ? '桌面常驻已关闭：主窗口已还原' : '桌面常驻已关闭，但未能还原原尺寸 —— 请手动调整窗口';
+        }
+        if (typeof obsidian.Notice === 'function') new obsidian.Notice(msg);
+      })
+    );
+
+  if (s.deskDock) {
+    new obsidian.Setting(containerEl)
+      .setName(i18nT('k6e21574a', '常驻窗口宽度'))
+      .setDesc(i18nT('k62a61d58', '像素。缩小后主窗口的宽度；留空或 0 用默认 365。'))
+      .addText((t) =>
+        t
+          .setPlaceholder('365')
+          .setValue(String(s.deskDockWidth || 0))
+          .onChange(async (v) => {
+            s.deskDockWidth = Math.max(0, Math.round(Number(v) || 0));
+            await plugin.saveSettings();
+          })
+      );
+
+    new obsidian.Setting(containerEl)
+      .setName(i18nT('kcd0bc52e', '常驻窗口高度'))
+      .setDesc(i18nT('kb2ea5a52', '同上，默认 378。改完重新开关一次「桌面常驻」即可生效。'))
+      .addText((t) =>
+        t
+          .setPlaceholder('378')
+          .setValue(String(s.deskDockHeight || 0))
+          .onChange(async (v) => {
+            s.deskDockHeight = Math.max(0, Math.round(Number(v) || 0));
+            await plugin.saveSettings();
+          })
+      );
+
+    new obsidian.Setting(containerEl)
+      .setName(i18nT('kd24f0447', '常驻窗口位置'))
+      .setDesc(i18nT('ka821fa0a', '缩小后摆到屏幕哪个角（已避开任务栏）。'))
+      .addDropdown((d) => {
+        POPOUT_POS_OPTIONS.forEach((o) => d.addOption(o[0], optText('popoutPos', o[0], o[1])));
+        d.setValue(s.deskDockPos).onChange(async (v) => {
+          s.deskDockPos = v;
+          await plugin.saveSettings();
+        });
+      });
+  }
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k50040f0e', '拖动后吸附到边缘'))
+    .setDesc(i18nT('k5352294a', '松手自动贴到最近的一条边；关闭则停在松手位置。'))
+    .addToggle((t) =>
+      t.setValue(s.snapToEdge).onChange(async (v) => {
+        s.snapToEdge = v;
+        await plugin.saveSettings();
+        if (ctrl.floatUI) ctrl.floatUI.applyPosition();
+      })
+    );
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k6f66fea9', '浮窗默认吸附边'))
+    .setDesc(i18nT('kab2157cc', '仅在开启吸附时生效。也可直接把浮窗拖到任意一边。'))
+    .addDropdown((d) =>
+      d
+        .addOption('top', i18nT('kaf767b7e', '上'))
+        .addOption('bottom', i18nT('k3850a186', '下'))
+        .addOption('left', i18nT('kd2aff141', '左'))
+        .addOption('right', i18nT('k4d9c32c2', '右'))
+        .setValue(s.floatEdge)
+        .onChange(async (v) => {
+          s.floatEdge = v;
+          await plugin.saveSettings();
+          if (ctrl.floatUI) ctrl.floatUI.applyPosition();
+        })
+    );
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('kc05965c2', '显示左侧栏图标'))
+    .setDesc(i18nT('k84c28a4a', "开启后左侧栏出现 🍅 图标，点击打开开始面板。关闭则只能从命令面板或底部状态栏的 🍅 唤出。"))
+    .addToggle((t) =>
+      t.setValue(s.showRibbonIcon).onChange(async (v) => {
+        s.showRibbonIcon = v;
+        await plugin.saveSettings();
+        new obsidian.Notice('重启 Obsidian 后生效');
+      })
+    );
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k9970ad07', '主题'))
+    .setDesc(i18nT('k66d405b0', "内置五套：经典（卡片）· 极简（纯文字）· 流光（动态光晕）· 空灵紫（浅色玻璃）· 赤镰（暗红血流）。选「自定义」则插件不提供任何样式，完全交给你的 CSS。"))
+    .addDropdown((d) => {
+      POMO_THEME_OPTIONS.forEach((o) => d.addOption(o.value, optText('theme', o.value, o.label)));
+      d.setValue(s.theme).onChange(async (v) => {
+        s.theme = v;
+        await plugin.saveSettings();
+        // 只换 class，不重建浮窗，正在跑的计时不受影响
+        ctrl.applyThemeToAll();
+        // 自定义 CSS 框要跟着显示/隐藏，故重绘本页
+        plugin.redrawSettingsTab();
+      });
+    });
+
+  // 自定义 CSS：仅在 custom 主题下显示
+  if (s.theme === 'custom') {
+    new obsidian.Setting(containerEl)
+      .setName(i18nT('k76c43b23', '自定义 CSS'))
+      .setDesc(i18nT('k8147d263', "写在这里的 CSS 会注入页面，选择器用 .pomo-theme-custom 开头即可，例如 .pomo-theme-custom .pomo-time { color: #f66; }。更省事的写法是只覆盖变量 —— 模板见下方，可整段复制再改数字。"))
+      .addTextArea((t) =>
+        t
+          .setPlaceholder(POMO_CSS_TEMPLATE)
+          .setValue(s.customCss)
+          .onChange(async (v) => {
+            s.customCss = v;
+            await plugin.saveSettings();
+            // 只更新 <style> 内容，不重绘设置页（否则输入框会失焦）
+            syncCustomCss(s.theme, s.customCss);
+          })
+      );
+
+    // 可整段复制的模板：列出所有可控变量，改数字即可，不必猜名字
+    const pre = containerEl.createEl('pre', { cls: 'pomo-css-template' });
+    pre.setText(POMO_CSS_TEMPLATE);
+
+    containerEl.createDiv({
+      cls: 'pomo-tip',
+      text:
+        i18nT('k04fec57d',
+          '不用写全套 —— 没覆盖的变量会回落到经典主题的默认值。' +
+          '常用选择器：.pomo-float（浮窗）、.pomo-container（侧边栏视图）、' +
+          '.pomo-btn[data-act="main|skip|stop"]（按钮，可用 order 改顺序）、' +
+          '[data-state="focus|short|long|paused"]（精确状态）、' +
+          '[data-pomo-kind="focus|rest|idle"]（段类别，暂停沿用暂停前那一段）。' +
+          '背景图请用库内相对路径，如 url("附件/tomato.png")；' +
+          '系统绝对路径换台设备就失效了。' +
+          '正计时超过一小时会补出小时位（H:MM:SS），比 MM:SS 长三个字符 —— ' +
+          '若浮窗放不下，调小 --pomo-time-size 或加大 --pomo-width。'),
+    });
+  }
+
+  /* ---- 提醒 ---- */
+  containerEl.createEl('h3', { text: i18nT('k6d40d527', '提醒') });
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k1eb7e2f9', '段结束通知'))
+    .setDesc(i18nT('kf92fc0ba', '每段专注 / 休息结束时弹出 Obsidian 通知。'))
+    .addToggle((t) =>
+      t.setValue(s.notifyOnSegmentEnd).onChange(async (v) => {
+        s.notifyOnSegmentEnd = v;
+        await plugin.saveSettings();
+      })
+    );
+
+  // 结束弹窗要连点几次遮罩才关：填 1 等于不拦截
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k8afcf125', '结束框防误关'))
+    .setDesc(i18nT('kbc570652', "结束 / 长休息询问这类弹窗，需要点几次「弹窗外部」才会关闭。填 1 表示不拦截（点一下就关）。弹窗内的按钮和 Esc 不受影响。"))
+    .addText((t) =>
+      t
+        .setPlaceholder('3')
+        .setValue(String(s.dismissClicks))
+        .onChange(async (v) => {
+          const n = parseInt(v, 10);
+          s.dismissClicks = isFinite(n) ? clamp(n, 1, 10) : 3;
+          await plugin.saveSettings();
+        })
+    );
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k95ffd3d4', '提示音'))
+    .setDesc(i18nT('ka6ba5456', '段结束时播放提示音。'))
+    .addToggle((t) =>
+      t.setValue(s.soundEnabled).onChange(async (v) => {
+        s.soundEnabled = v;
+        await plugin.saveSettings();
+      })
+    );
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k2aeed95d', '提示音来源'))
+    .setDesc(i18nT('k792bedaf', '内置音为系统合成音，无需文件；自定义则播放指定文件夹里的音频。'))
+    .addDropdown((d) =>
+      d
+        .addOption('builtin', i18nT('kd339025f', '内置合成音'))
+        .addOption('folder', i18nT('k79abf822', '自定义文件夹'))
+        .setValue(s.soundSource)
+        .onChange(async (v) => {
+          s.soundSource = v;
+          await plugin.saveSettings();
+          await ctrl.refreshSoundFiles();
+          plugin.redrawSettingsTab();
+        })
+    );
+
+  // 自定义音效文件夹：仅在 folder 模式下显示
+  if (s.soundSource === 'folder') {
+    const found = ctrl.soundFiles.length;
+    new obsidian.Setting(containerEl)
+      .setName(i18nT('k779c8ad4', '音频文件夹'))
+      .setDesc(
+        i18nT('k0504a662', '填写库内的文件夹路径，例如 音效/提示音。当前找到 {0} 个音频文件', found) +
+          (found ? i18nT('kaa938aa5', '，按顺序轮播。') : i18nT('k4e9d6e3a', '，请检查路径是否正确。'))
+      )
+      .addText((t) =>
+        t
+          .setPlaceholder(i18nT('k8291bfa6', '音效/提示音'))
+          .setValue(s.soundFolder)
+          .onChange(async (v) => {
+            s.soundFolder = v.trim().replace(/^\/+|\/+$/g, '');
+            await plugin.saveSettings();
+            await ctrl.refreshSoundFiles();
+          })
+      )
+      .addButton((b) =>
+        b.setButtonText(i18nT('k75e1781b', '重新扫描')).onClick(async () => {
+          await ctrl.refreshSoundFiles();
+          plugin.redrawSettingsTab();
+          new obsidian.Notice(`找到 ${ctrl.soundFiles.length} 个音频文件`);
+        })
+      );
+  }
+
+  /* ---- 斜杠命令 ---- */
+  containerEl.createEl('h3', { text: i18nT('k4f15a310', '斜杠命令') });
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k1ef6fa49', '启用斜杠命令'))
+    .setDesc(i18nT('k8c93fea4', '在笔记中输入 /pomodoro 唤起番茄钟。'))
+    .addToggle((t) =>
+      t.setValue(s.enableSlashCommand).onChange(async (v) => {
+        s.enableSlashCommand = v;
+        await plugin.saveSettings();
+      })
+    );
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('k50cbeaf7', '触发词'))
+    .setDesc(i18nT('kfdc653bd', '默认 pomodoro，即 /pomodoro。可自行修改，不用带斜杠。'))
+    .addText((t) =>
+      t
+        .setPlaceholder('pomodoro')
+        .setValue(s.slashTrigger)
+        .onChange(async (v) => {
+          s.slashTrigger = v.trim().replace(/^\//, '') || 'pomodoro';
+          await plugin.saveSettings();
+        })
+    );
+
+  /* ---- 其他 ---- */
+  containerEl.createEl('h3', { text: i18nT('k301739cd', '其他') });
+
+  new obsidian.Setting(containerEl)
+    .setName(i18nT('kf9ecdf4e', '显示建议提示'))
+    .setDesc(i18nT('k62efe8d5', '时长超出常规范围时给出灰色提示，不阻止使用。'))
+    .addToggle((t) =>
+      t.setValue(s.showHints).onChange(async (v) => {
+        s.showHints = v;
+        await plugin.saveSettings();
+        plugin.redrawSettingsTab();
+      })
+    );
+
+  containerEl.createDiv({ cls: 'pomo-tip' }).setText(
+    i18nT('kd1397a2a', '提示：番茄钟进度不会保存。关闭 Obsidian 后计数清零，重新打开只恢复设置，需手动开始。')
+  );
+
+  // 区末统一提供恢复默认入口
+  const { addResetButton } = require('./settings.js');
+  addResetButton(containerEl, plugin, 'pomodoro', '番茄钟');
+}
+
+/** 注册番茄钟模块：视图、斜杠建议、控制器，并挂上记录器 */
+function registerPomodoro(plugin) {
+  const ctrl = new PomodoroController(plugin);
+  plugin.pomodoro = ctrl;
+  plugin.recorder = new Recorder(plugin);
+
+  plugin.registerView(POMODORO_VIEW_TYPE, (leaf) => new PomodoroView(leaf, ctrl));
+  plugin.registerEditorSuggest(new PomodoroSuggest(plugin, ctrl));
+  ctrl.init();
+
+  return ctrl;
+}
+
+function refreshPomodoroViews(plugin) {
+  if (plugin.pomodoro) plugin.pomodoro.refreshUI();
+}
+
+/* ------------------------------------------------------------------ *
+ * 番茄钟设置内容
+ * ------------------------------------------------------------------ */
+
+module.exports = {
+  // 番茄钟
+  POMODORO_VIEW_TYPE,
+  PomodoroView,
+  PomodoroController,
+  registerPomodoro,
+  refreshPomodoroViews,
+  renderPomodoroSettings,
+
+  // 会话记录
+  Recorder,
+  renderRecordSettings,
+  renderTemplate,
+  sanitizeFileName,
+  insertAtTop,
+  DEFAULT_RECORD_TEMPLATE,
+
+  // 测试钩子：_test/pomodoro-ui.js 用它验证「防误关」逻辑，
+  // 运行时不引用。（产物里保留，方便直接对构建结果做回归）
+  __testModals: { GuardedModal, StartModal, AskLongBreakModal, AskRestartModal, SummaryModal },
+
+  // 测试钩子：主题挂载与自定义 CSS 注入，_test/pomotheme.js 直接对产物做回归。
+  // POMO_CSS_TEMPLATE 一并导出：测试用它校验「模板里的变量在 CSS 里都有人用」，
+  // 防止写出看着能改、其实没人读的假接口。
+  __testTheme: { applyTheme, syncCustomCss, POMO_CSS_ID, POMO_CSS_TEMPLATE },
+
+  // 测试钩子：_test/pomomini.js 用真实 FloatUI 验证最小化后的标题与按钮。
+  __testFloatUI: FloatUI,
+
+  // 测试钩子：段类别判定（暂停沿用暂停前那一段），_test/pomotheme.js 校验。
+  kindOf,
+
+  // 测试钩子：桌面常驻开启后离开设置页，_test/deskdock.js 校验。
+  leaveSettingsForDock,
+  clickSettingsClose,
+};
