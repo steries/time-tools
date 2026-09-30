@@ -60,7 +60,7 @@ exit=1
 
 ```bash
 bash _run_tests.sh
-# 期望：合计：套件 通过 49 / 失败 0（共 49 个）；退出码 0
+# 期望：合计：套件 通过 51 / 失败 0（共 51 个）；退出码 0
 ```
 
 配好钩子可让每次提交自动跑（仓库根执行一次即可）：
@@ -131,3 +131,32 @@ node _test/srchealth.js
 会漏，是典型漂移源。**空串不要 normalize**：`''` 表示「库根目录」，这个语义必须保住。
 
 详见 `ARCHITECTURE.md` §10.7。
+
+---
+
+## 7. Node 版本要求
+
+- 本项目在 **Node 20 与 Node 24** 上均已验证（v3.29.0 起）。
+- 提交前建议至少在两个大版本上各跑一次全量。
+- **已知差异**：`globalThis.navigator` 在 Node 21+ 为**只读 getter**。
+  测试里 `global.navigator = {...}` 在非严格模式下【静默失败】（不生效也不报错），
+  表现为「剪贴板相关 5 项红」而根因在环境。必须走 `Object.defineProperty`。
+- 若新增全局 mock，先用 `Object.getOwnPropertyDescriptor(global, key)` 确认可写性。
+  已知只读 getter 全局：`navigator` / `crypto` / `performance`。
+
+沙盒里模拟 Node 24（无真机时的替代验证）：
+
+```js
+// /tmp/sim.js
+Object.defineProperty(global, 'navigator', {
+  get() { return { userAgent: 'Node', hardwareConcurrency: 8, language: 'zh-CN' }; },
+  configurable: true, enumerable: true,
+});
+```
+
+```bash
+node -r /tmp/sim.js _test/quickadd.js              # 单套件
+NODE_OPTIONS="-r /tmp/sim.js" bash _run_tests.sh   # 全量
+```
+
+详见 `ARCHITECTURE.md` §8.1 与开发启动卡 §7.6。

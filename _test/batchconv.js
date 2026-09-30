@@ -46,6 +46,58 @@ console.log('[BATCH] 批量转换');
   ok(faithful, '候选的 index 与原文对得上');
 }
 
+/* ---------- ①b 农历粗筛不得漏字、不得截断年份前缀 ---------- */
+/*
+ * 历史 bug（破坏性错值，比漏转严重得多）：
+ *   月份字符类缺「正/冬/腊/闰」→ 腊月 / 冬月 / 正月 / 闰月 整条漏转
+ *   日位字符类缺「二」        → 二十 / 十二 整条漏转
+ *   年份前缀被甩在外面        → 「2023年闰二月初五」按**当前农历年**算，
+ *                                改成 2026 年并留下「2023年闰」残片
+ * 第三条最要命：用户看不出被改错了，只会发现"日期不对"。
+ */
+{
+  const text = '2023年闰二月初五 项目启动\n腊月初八 年会\n八月二十 中期评审\n2026年八月十九 结项\n正月初一 开工\n';
+  const raws = collectCandidates(text).map((x) => x.raw);
+  ok(raws.includes('2023年闰二月初五'), '年份与「闰」必须一并吃进来，不得截断：' + JSON.stringify(raws));
+  ok(raws.some((r) => r === '腊月初八'), '筛出腊月（月份字符类含「腊」）');
+  ok(raws.some((r) => r === '八月二十'), '筛出二十（日位字符类含「二」）');
+  ok(raws.some((r) => r === '正月初一'), '筛出正月（月份字符类含「正」）');
+  ok(raws.some((r) => r === '2026年八月十九'), '带年份的农历完整命中（不留「2026年」残片）');
+  // 防截断兜底：任何被"年份/闰"紧贴的农历片段都不许单独出现
+  let truncated = false;
+  for (const x of collectCandidates(text)) {
+    if (/月/.test(x.raw) && !/^\d{4}\s*年/.test(x.raw)) {
+      const prev = x.index > 0 ? text.charAt(x.index - 1) : '';
+      if (prev === '年' || prev === '闰') truncated = true;
+    }
+  }
+  ok(!truncated, '不存在被「年/闰」截断的农历片段（错值比漏转更糟，宁可丢弃）');
+}
+{
+  // 整篇端到端：批量转换结果必须与「手动选中单条」一致
+  const s = require(path.join(SRC, 'settings.js'));
+  const p = { settings: JSON.parse(JSON.stringify(s.DEFAULT_SETTINGS)) };
+  const text = '2023年闰二月初五 项目启动\n腊月初八 年会\n八月二十 中期评审\n2026年八月十九 结项\n';
+  const hits = scanBatch(p, text, 'unify');
+  const got = Object.create(null);
+  for (const h of hits) got[h.raw] = h.result;
+  ok(!!got['2023年闰二月初五'], '批量：2023年闰二月初五 被转（此前漏）');
+  ok(got['2023年闰二月初五'] && got['2023年闰二月初五'].indexOf('2023-') === 0,
+    '批量：闰二月算出的是 2023 年，不是当前年：' + got['2023年闰二月初五']);
+  ok(!!got['腊月初八'], '批量：腊月初八 被转（此前漏）');
+  ok(!!got['八月二十'], '批量：八月二十 被转（此前漏）');
+  const out = applyBatch(text, hits);
+  ok(out.indexOf('2023年闰') < 0, '批量输出不留「2023年闰」残片');
+  ok(out.indexOf('2026年2026-') < 0, '批量输出不留「2026年」残片（此前真实发生）');
+  // 每条命中必须与单条转换结果一致 —— 不一致说明粗筛截断了原文
+  let same = true;
+  for (const h of hits) {
+    const one = ts.compute(p, 'unify', h.raw, {});
+    if (one !== h.result) same = false;
+  }
+  ok(same, '批量结果与手动选中单条转换完全一致');
+}
+
 /* ---------- ② 只转能转的（用假 plugin 走真实 compute） ---------- */
 const mkPlugin = (over) => ({
   settings: JSON.parse(JSON.stringify({

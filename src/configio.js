@@ -70,9 +70,9 @@ async function importConfig(plugin, text) {
 async function runExport(plugin) {
   const r = await exportConfig(plugin);
   if (r.ok) {
-    new obsidian.Notice(`✅ 配置已导出到库根目录：${r.path}（想留多份请自行复制改名）`);
+    new obsidian.Notice(i18nT('k0885d5b3', '✅ 配置已导出到库根目录：{0}（想留多份请自行复制改名）', r.path));
   } else {
-    new obsidian.Notice(`❌ 导出失败（${r.reason}）：请检查库是否可写，或手动复制 .obsidian/plugins/time-tools/data.json`);
+    new obsidian.Notice(i18nT('ke7d0f71c', '❌ 导出失败（{0}）：请检查库是否可写，或手动复制 .obsidian/plugins/time-tools/data.json', r.reason));
   }
   return r;
 }
@@ -105,14 +105,14 @@ function runImport(plugin) {
       ok.addEventListener('click', async () => {
         const r = await importConfig(plugin, this.value);
         if (r.ok) {
-          new obsidian.Notice('✅ 配置已导入并应用');
+          new obsidian.Notice(i18nT('kdd04120c', '✅ 配置已导入并应用'));
           if (plugin.redrawSettingsTab) plugin.redrawSettingsTab();
         } else {
           const msg = {
-            'bad-json': '不是合法的 JSON 文本',
-            'not-object': '内容不是一个配置对象',
-            'apply-failed': '应用失败，配置未改动',
-          }[r.reason] || '导入失败';
+            'bad-json': i18nT('k105c9ada', '不是合法的 JSON 文本'),
+            'not-object': i18nT('k4f0f18f5', '内容不是一个配置对象'),
+            'apply-failed': i18nT('k5fc2de79', '应用失败，配置未改动'),
+          }[r.reason] || i18nT('kfddcd7c6', '导入失败');
           new obsidian.Notice(`❌ ${msg}`);
         }
         this.close();

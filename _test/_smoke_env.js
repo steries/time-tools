@@ -4,6 +4,18 @@
  * smoke.js 拆成多个套件后，DOM/window stub 和 check() 不能各抄一份 ——
  * 抄了就会「改一处忘另一处」，两边 stub 行为不一致时故障极难排查。
  * 这里只做环境装配，不含任何断言，跑它自身不产生用例。
+ *
+ * 公共环境契约 —— 本文件对外承诺提供以下能力，其他套件依赖它们。
+ * 新增能力必须登记在这里；删除能力必须先确认无人依赖。
+ *
+ *   global.window / global.document      DOM stub
+ *   global.__modals / global.__notices   弹窗与提示收集
+ *   global.__clipboard                   ★ 剪贴板（recorder.js 写入，quickadd.js 读取）
+ *   global.navigator.clipboard.writeText 同上，写入侧走这个
+ *   check(name, cond, actual)            断言器
+ *   done()                               收尾，输出统计并设置退出码
+ *
+ * 依赖方见 ARCHITECTURE.md「测试环境与公共契约」一节。
  */
 process.env.TZ = 'UTC';
 const fs = require('fs');

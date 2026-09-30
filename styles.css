@@ -78,7 +78,7 @@
   background-color: var(--background-modifier-hover);
 }
 .tsi-preset-row.is-active {
-  background-color: var(--background-modifier-active-hover);
+  background-color: var(--background-modifier-active-hover, var(--background-modifier-hover));
 }
 .tsi-preset-row.is-active .tsi-preset-label {
   color: var(--text-accent);
@@ -1798,7 +1798,7 @@
 .tt-undo-badge:hover {
   opacity: 1;
   background: var(--interactive-accent);
-  color: var(--interactive-accent-text);
+  color: var(--interactive-accent-text, var(--text-on-accent));
 }
 
 /* 状态栏撤回指示器：不依赖编辑器装饰，始终可见 */
@@ -2024,7 +2024,7 @@
 .tt-cal-wk.is-picked .tt-cal-dot.is-hollow { border-color: var(--text-on-accent); }
 .tt-cal-day.is-week-row {
   background: var(--background-modifier-hover);
-  box-shadow: inset 0 0 0 1px var(--interactive-accent-hover);
+  box-shadow: inset 0 0 0 1px var(--interactive-accent-hover, var(--interactive-accent));
 }
 /* 月记 / 年记打开时高亮对应标题，不用全填充（那会盖住文字） */
 .tt-cal-month.is-picked, .tt-cal-year.is-picked {
@@ -2033,7 +2033,7 @@
   border-radius: 4px; padding: 0 4px;
 }
 /* 兜底：只有 has-note 但还没读到字数时，至少画一个点 */
-.tt-cal-day.has-note:not(.has-words):not(:has(.tt-cal-dot))::after {
+.tt-cal-day.has-note:not(.has-words).tt-cal-need-dot::after {
   content: ''; display: block; width: 4px; height: 4px; margin: 2px auto 0;
   border-radius: 50%; background: var(--text-muted);
 }

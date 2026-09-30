@@ -27,7 +27,7 @@ const {
 const { registerConfigIO } = require('./configio.js');
 const { isPopoutWindow, applyPopoutWindowSoon } = require('./pomowin.js');
 /* 界面语言：零依赖模块，必须早于 settings.js（其默认值含 uiLang） */
-const { setLang } = require('./i18n.js');
+const { setLang, t: i18nT } = require('./i18n.js');
 
 /*
  * 模块注册统一入口 —— 新增模块的唯一接入方式。
@@ -47,7 +47,7 @@ function registerModule(spec) {
     console.error('[Time Tools] ' + spec.name + '模块注册失败', e);
     try {
       new obsidian.Notice(
-        'Time Tools：' + spec.name + '模块加载失败，其余功能不受影响'
+        i18nT('k3744cfe6', 'Time Tools：{0}模块加载失败，其余功能不受影响', spec.name)
       );
     } catch (_) {
       /* Notice 不可用时不得二次抛错，否则 onload 会中断 */
@@ -115,7 +115,7 @@ class TimeToolsPlugin extends obsidian.Plugin {
           if (!isCalendarOpen(this)) return false;
           if (!checking) {
             const ok = closeOwnCalendar(this);
-            if (!ok) new obsidian.Notice('日历视图当前未打开');
+            if (!ok) new obsidian.Notice(i18nT('k53869eea', '日历视图当前未打开'));
           }
           return true;
         },
@@ -317,7 +317,7 @@ class TimeToolsPlugin extends obsidian.Plugin {
   /** 在光标处插入时间戳；有选区时替换选区 */
   insertIntoEditor(editor) {
     if (!editor) {
-      new obsidian.Notice('没有正在编辑的笔记');
+      new obsidian.Notice(i18nT('k1b49655a', '没有正在编辑的笔记'));
       return;
     }
     const text = this.formatNow() + (this.settings.timestamp.insertNewline ? '\n' : '');
@@ -328,7 +328,7 @@ class TimeToolsPlugin extends obsidian.Plugin {
   insertTimestamp() {
     const editor = this.getActiveEditor();
     if (!editor) {
-      new obsidian.Notice('请先打开一个笔记，再把光标放到要插入的位置');
+      new obsidian.Notice(i18nT('kcda26523', '请先打开一个笔记，再把光标放到要插入的位置'));
       return;
     }
     this.insertIntoEditor(editor);

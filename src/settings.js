@@ -524,6 +524,9 @@ const DEFAULT_SETTINGS = {
     enableSlashCommand: false,
     slashTrigger: 'now', // 自定义触发词（不含斜杠）
     extensions: defaultExtensions(), // 扩展：时间文本转换（总开关 + 逐项开关）
+    // 时间转换结果是否用英文输出（相对时间 / 星期 / 内置节日名）。
+    // null = 从未设置过，按界面语言默认：中文关、非中文开。
+    englishOutput: null,
   },
 
   /* ---- 模块二：番茄钟 ---- */
@@ -808,12 +811,12 @@ function addResetButton(containerEl, plugin, keys, label) {
   });
   const btn = wrap.createEl('button', { cls: 'tt-reset-btn', text: i18nT('k3c470548', '恢复默认设置') });
   btn.onclick = async () => {
-    const ok = await confirmReset(plugin, label || '本区');
+    const ok = await confirmReset(plugin, label || i18nT('k3fcfce8a', '本区'));
     if (!ok) return;
     resetSection(plugin, keys);
     await plugin.saveSettings();
     plugin.redrawSettingsTab();
-    new obsidian.Notice(`已恢复默认设置：${label || '本区'}`);
+    new obsidian.Notice(i18nT('ka283fa1a', '已恢复默认设置：{0}', label || i18nT('k3fcfce8a', '本区')));
   };
 }
 
@@ -848,11 +851,13 @@ function confirmDialog(plugin, opt) {
 
 function confirmReset(plugin, label) {
   return confirmDialog(plugin, {
-    title: '确认恢复默认设置',
-    content:
-      `确定要把「${label}」这一区的设置恢复为默认值吗？\n\n` +
-      '此操作只影响该分区，其余分区保持不变。',
-    okText: '恢复',
+    title: i18nT('kf41e9fe3', '确认恢复默认设置'),
+    content: i18nT(
+      'k7a3cc52d',
+      '确定要把「{0}」这一区的设置恢复为默认值吗？\n\n此操作只影响该分区，其余分区保持不变。',
+      label
+    ),
+    okText: i18nT('kc7db6d4f', '恢复'),
     warning: true,
   });
 }
@@ -1416,7 +1421,7 @@ class TimeToolsSettingTab extends obsidian.PluginSettingTab {
       this.containerEl.empty();
       this.containerEl.createDiv({
         cls: 'tt-settings-error',
-        text: i18nT('k534ce29d', '设置页渲染失败：') + (e && e.message ? e.message : e) + '。其余设置不受影响。',
+        text: i18nT('ka1b02349', '设置页渲染失败：{0}。其余设置不受影响。', e && e.message ? e.message : e),
       });
     }
   }

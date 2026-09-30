@@ -5,12 +5,4 @@
 #   git config core.hooksPath .githooks
 #
 # 绕过（仅限确认无误时）：git commit --no-verify
-
-# 为什么用 bash <脚本> 而不是 exec <脚本>：
-# Windows 上 Git 的 core.fileMode 默认为 false，
-# 所有文件都会被记成 100644（没有执行位），
-# 直接 exec 会 Permission denied。
-# 经解释器调用不需要执行位，Linux / Mac 上同样有效。
-root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 1
-cd "$root" || exit 1
-bash ./_run_tests.sh
+exec "$(dirname "$0")/../_run_tests.sh"

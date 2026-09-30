@@ -170,18 +170,18 @@ function readJudgement(key, settings) {
  */
 
 const SOLAR_FESTIVALS = [
-  { names: ['元旦', '新年'], month: 1, day: 1 },
-  { names: ['情人节'], month: 2, day: 14 },
-  { names: ['植树节'], month: 3, day: 12 },
-  { names: ['劳动节', '五一'], month: 5, day: 1 },
-  { names: ['青年节'], month: 5, day: 4 },
-  { names: ['儿童节'], month: 6, day: 1 },
-  { names: ['建党节', '七一'], month: 7, day: 1 },
-  { names: ['建军节', '八一'], month: 8, day: 1 },
-  { names: ['教师节'], month: 9, day: 10 },
-  { names: ['国庆节', '国庆'], month: 10, day: 1 },
-  { names: ['平安夜'], month: 12, day: 24 },
-  { names: ['圣诞节'], month: 12, day: 25 },
+  { names: ['元旦', '新年'], month: 1, day: 1, en: "New Year's Day", },
+  { names: ['情人节'], month: 2, day: 14, en: "Valentine's Day", },
+  { names: ['植树节'], month: 3, day: 12, en: "Arbor Day", },
+  { names: ['劳动节', '五一'], month: 5, day: 1, en: "Labor Day", },
+  { names: ['青年节'], month: 5, day: 4, en: "Youth Day", },
+  { names: ['儿童节'], month: 6, day: 1, en: "Children's Day", },
+  { names: ['建党节', '七一'], month: 7, day: 1, en: "Party Founding Day", },
+  { names: ['建军节', '八一'], month: 8, day: 1, en: "Army Day", },
+  { names: ['教师节'], month: 9, day: 10, en: "Teachers' Day", },
+  { names: ['国庆节', '国庆'], month: 10, day: 1, en: "National Day", },
+  { names: ['平安夜'], month: 12, day: 24, en: "Christmas Eve", },
+  { names: ['圣诞节'], month: 12, day: 25, en: "Christmas Day", },
 ];
 
 /*

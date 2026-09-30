@@ -15,7 +15,10 @@
  */
 
 const obsidian = require('obsidian');
-const { t: i18nT } = require('./i18n.js');
+const { t: i18nT,
+  WEEKDAY_NAMES,
+  effectiveLang,
+} = require('./i18n.js');
 const { DEFAULT_SETTINGS, ACTION_DEFS, isLunarKey } = require('./settings.js');
 const { actionText, judgeText, presetText, daypartText, miscText } = require('./i18n.js');
 /*
@@ -916,6 +919,76 @@ function parseCNNumber(text) {
 }
 
 /**
+ * 解析英文时刻：8am / 7:30pm / 5 pm / noon / midnight。
+ *
+ * README 明文承诺了这几项，但 src 全目录原本零处 am/pm 处理，
+ * 所以「8am」连 looksLikeRelative 都过不了 —— 转换菜单根本不弹，
+ * 用户看到的是"完全没反应"。与 §6（tomorrow 5pm）同源，共用这一个函数。
+ *
+ * 12 小时制约定：12am = 00:00、12pm = 12:00。
+ * @returns {{hour:number,minute:number}|null}
+ */
+function parseClockEN(text) {
+  const s = String(text ?? '').trim().toLowerCase();
+  if (!s) return null;
+  if (s === 'noon') return { hour: 12, minute: 0 };
+  if (s === 'midnight') return { hour: 0, minute: 0 };
+  const m = /^(\d{1,2})(?:\s*:\s*(\d{2}))?\s*(am|pm)$/.exec(s);
+  if (!m) return null;
+  let h = Number(m[1]);
+  if (h > 12) return null; // 13pm 这种不成立
+  const afternoon = m[3] === 'pm';
+  if (afternoon && h < 12) h += 12;
+  if (!afternoon && h === 12) h = 0;
+  return { hour: h, minute: Number(m[2] || 0) };
+}
+
+/**
+ * 英文「口语日 + 时刻」：tomorrow 5pm / yesterday 3pm / next Monday 10am。
+ * 词表复用 WORD_REL，只把首尾锚定换成前缀匹配，不另抄一份英文词表
+ * （另抄就会出现「改一处漏一处」，这正是本批其它几个 bug 的病根）。
+ */
+function splitEnglishDayClock(text) {
+  const s = String(text ?? '').trim();
+  if (!s) return null;
+  // ① 口语日：tomorrow 5pm / yesterday 3pm
+  for (const w of WORD_REL) {
+    const stem = w.re.source.replace(/^\^/, '').replace(/\$$/, '');
+    const m = new RegExp('^' + stem + '\\s+', 'i').exec(s);
+    if (!m) continue;
+    const clock = parseClockEN(s.slice(m[0].length).trim());
+    if (clock) return { kind: 'ymd', w: w, clock: clock };
+  }
+  /*
+   * ② 英文星期：Monday 3pm / next Monday 10am。
+   * 不带时刻时由 parseEnglishWeekday 处理（下面 2c 之后），但它要求整串只含
+   * 「(next|last|this)? 星期名」，多了时刻就失配 —— 所以这里单独兜。
+   */
+  const wm = /^(?:(next|last|this)\s+)?([a-z]+)\s+(.+)$/i.exec(s);
+  if (wm) {
+    const wd = EN_WEEKDAY[(wm[2] || '').toLowerCase()];
+    const clock = wd ? parseClockEN(wm[3]) : null;
+    if (wd && clock) {
+      const p = (wm[1] || '').toLowerCase();
+      const wo = p === 'next' ? 1 : p === 'last' ? -1 : 0;
+      return { kind: 'weekday', wd: wd, wo: wo, clock: clock };
+    }
+  }
+  return null;
+}
+
+/** 按 WORD_REL 条目的 y/m/d 推进基准日；月份走钳制，避免月末溢出 */
+function applyWordYmd(base, w, raw) {
+  const sign = w.dirFromWord && /^last/i.test(raw) ? -1 : 1;
+  const d = new Date(base.getTime());
+  if (w.y) d.setFullYear(d.getFullYear() + sign * w.y);
+  // 走钳制：01-31 +1月 直接 setMonth 会变 03-03（跨过整个二月）
+  if (w.m) return addMonthsClamped(d, sign * w.m);
+  if (w.d) d.setDate(d.getDate() + sign * w.d);
+  return d;
+}
+
+/**
  * 解析时刻：5点 / 5点半 / 5点30 / 下午5点 / 17点 / 5:30。
  * @returns {{hour:number,minute:number}|null}
  */
@@ -930,24 +1003,39 @@ function parseClockCN(text, daypartKey) {
    */
   let pm = null; // null = 未指定（按 24 小时制理解）
   let body = s;
+  /*
+   * 「中午」单列，不能简单标成 pm:true —— 那样「中午11点」会变成 23:00（错）。
+   * 中午覆盖 11:00~13:00，所以 11、12 点保持不动，1~10 点按 PM 理解
+   * （中文说「中午1点」就是下午 1 点）。这是口径取舍，已记进启动卡口径表。
+   */
+  let noon = false;
   if (/^(下午|傍晚|晚上|夜里|深夜)/.test(body)) {
     pm = true;
     body = body.replace(/^(下午|傍晚|晚上|夜里|深夜)/, '');
   } else if (/^(上午|早上|早晨|凌晨)/.test(body)) {
     pm = false;
     body = body.replace(/^(上午|早上|早晨|凌晨)/, '');
+  } else if (/^中午/.test(body)) {
+    noon = true;
+    body = body.replace(/^中午/, '');
   }
   if (pm === null && daypartKey) {
     const t = TIME_OF_DAY.find((x) => x.key === daypartKey);
     if (t) pm = t.pm;
+    if (daypartKey === '中午') noon = true;
   }
+  /* PM 换算统一走这里，各返回点不再各写一遍 —— 否则改口径要改六处 */
+  const apm = (h) => (pm && h < 12) ? h + 12 : (noon && h < 11 ? h + 12 : h);
 
   // 5:30 形式
-  let m = /^(\d{1,2}):(\d{2})$/.exec(body);
+  // 冒号必须同时收中英文 —— 中文输入法打出来的是全角「：」。
+  // 裸写「12：45」能认是因为走了 TIME_ONLY_RE 兜底（那里写的是 [:：]），
+  // 一旦带时段/日期前缀就落到这条路径，只认半角就会整条判 null。
+  let m = /^(\d{1,2})[:：](\d{2})$/.exec(body);
   if (m) {
     const h = Number(m[1]);
     if (h > 23 || Number(m[2]) > 59) return null;
-    return { hour: pm && h < 12 ? h + 12 : h, minute: Number(m[2]) };
+    return { hour: apm(h), minute: Number(m[2]) };
   }
 
   /*
@@ -964,7 +1052,7 @@ function parseClockCN(text, daypartKey) {
       const hh = Math.floor(total / 60);
       const mm = ((total % 60) + 60) % 60;
       if (hh >= 0 && hh <= 23) {
-        return { hour: pm && hh < 12 ? hh + 12 : hh, minute: mm };
+        return { hour: apm(hh), minute: mm };
       }
     }
     return null;
@@ -977,7 +1065,7 @@ function parseClockCN(text, daypartKey) {
     let hour = /^\d+$/.test(hRaw) ? Number(hRaw) : parseCNNumber(hRaw);
     if (hour !== null && isFinite(hour) && hour <= 23) {
       const ke = { 一: 15, 二: 30, 三: 45 }[m[2]] || 15;
-      if (pm && hour < 12) hour += 12;
+      hour = apm(hour);
       return { hour, minute: ke };
     }
     return null;
@@ -991,7 +1079,7 @@ function parseClockCN(text, daypartKey) {
     if (hour !== null && isFinite(hour) && hour <= 23) {
       const mm = Number(m[2]);
       if (mm <= 59) {
-        if (pm && hour < 12) hour += 12;
+        hour = apm(hour);
         return { hour, minute: mm };
       }
     }
@@ -1004,7 +1092,7 @@ function parseClockCN(text, daypartKey) {
     let hour = Number(m[1]);
     const mm = Number(m[2]);
     if (hour <= 23 && mm <= 59) {
-      if (pm && hour < 12) hour += 12;
+      hour = apm(hour);
       return { hour, minute: mm };
     }
     return null;
@@ -1019,7 +1107,7 @@ function parseClockCN(text, daypartKey) {
     if (hour === null || !isFinite(hour)) return null;
     if (hour > 23) return null;
     // 中文习惯：「下午5点」→ 17，「下午12点」保持 12
-    if (pm && hour < 12) hour += 12;
+    hour = apm(hour);
 
     let minute = 0;
     if (m[2]) {
@@ -1863,16 +1951,23 @@ function parseRelative(text, base, settings) {
    */
   const bare = parseClockCN(raw);
   if (bare) return withClock(now0, bare.hour, bare.minute, 0);
+  // 纯英文时刻：8am / 7:30pm / noon / midnight（README 承诺）
+  const bareEn = parseClockEN(raw);
+  if (bareEn) return withClock(now0, bareEn.hour, bareEn.minute, 0);
+
+  // ---- 2a-en) 英文口语日 + 时刻：tomorrow 5pm / next Monday 10am ----
+  const edc = splitEnglishDayClock(raw);
+  if (edc) {
+    const base = edc.kind === 'ymd'
+      ? applyWordYmd(now0, edc.w, raw)
+      : resolveWeekday(now0, edc.wd, edc.wo, pluginSettingsForParse);
+    return withClock(base, edc.clock.hour, edc.clock.minute, 0);
+  }
 
   // ---- 2b) 纯英文口语（yesterday / next week …）----
   const w = WORD_REL.find((item) => item.re.test(raw));
   if (w) {
-    let sign = 1;
-    if (w.dirFromWord) sign = /^last/i.test(raw) ? -1 : 1;
-    const d = new Date(now0.getTime());
-    if (w.y) d.setFullYear(d.getFullYear() + sign * w.y);
-    if (w.m) d.setMonth(d.getMonth() + sign * w.m);
-    if (w.d) d.setDate(d.getDate() + sign * w.d);
+    const d = applyWordYmd(now0, w, raw);
 
     // 星期几 / 月底月初 / 固定月日
     // 「周末」的 wd 只是占位，真实值按用户在「时间口径」里选的来
@@ -1886,8 +1981,15 @@ function parseRelative(text, base, settings) {
       d.setDate(w.fixedDay);
       return d;
     }
-    // 英文时段（this morning / last night …）
-    if (w.daypart && convertDaypartAlone(pluginSettingsForParse)) {
+    /*
+     * 英文时段（this morning / last night …）。
+     * 这里**不受** convertDaypartAlone 门控：那个开关管的是「裸时段词」
+     * （单独选中"早上"别给它编 09:00），而 WORD_REL 里带 daypart 的这 8 条
+     * 全都有明确的日期锚点（d/y/m），时段是**限定词**不是模糊词。
+     * 被门控挡住的表现是：中文「明天下午」→ 15:00，英文「tomorrow afternoon」
+     * 却沿用基准时刻 10:00，中英不一致。
+     */
+    if (w.daypart) {
       const h = daypartHour(w.daypart, pluginSettingsForParse);
       return withClock(d, h, 0, 0);
     }
@@ -1965,7 +2067,25 @@ function parseRelative(text, base, settings) {
   return shiftByUnit(now0, m[2], n, (m[4] || '').indexOf('前') >= 0 ? -1 : 1);
 }
 
-/** 按单位推进时间；月/年走日历加法，避免固定天数在月末、闰年出错 */
+/**
+ * 按「月」推进并**钳到该月最后一天**。
+ *
+ * 直接 setMonth 会在月末静默进位：01-31 +1月 → 03-03（跨过了整个二月），
+ * 往回推也一样：03-31 -1月 → 03-03，**日期反而前进了**。
+ * 先归到 1 号再进位，最后钳到目标月的天数，就不会溢出。
+ * 「年」同理：2024-02-29 +1年 → 2025-03-01（次年没有 29 号）。
+ */
+function addMonthsClamped(d, months) {
+  const day = d.getDate();
+  const t = new Date(d.getTime());
+  t.setDate(1); // 先归 1 号，避开溢出
+  t.setMonth(t.getMonth() + months);
+  const last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+  t.setDate(Math.min(day, last)); // 钳到该月最后一天
+  return t;
+}
+
+/** 按单位推进时间；月/年走日历加法并钳月末，避免固定天数在月末、闰年出错 */
 function shiftByUnit(now, unit, n, dir) {
   const d = new Date(now.getTime());
   if (unit === '秒') return new Date(d.getTime() + dir * n * 1000);
@@ -1979,12 +2099,10 @@ function shiftByUnit(now, unit, n, dir) {
     return new Date(d.getTime() + dir * n * 15 * 60000);
   }
   if (unit.indexOf('月') >= 0) {
-    d.setMonth(d.getMonth() + dir * n);
-    return d;
+    return addMonthsClamped(d, dir * n);
   }
   if (unit === '年') {
-    d.setFullYear(d.getFullYear() + dir * n);
-    return d;
+    return addMonthsClamped(d, dir * n * 12);
   }
   return null;
 }
@@ -2057,7 +2175,16 @@ function parseGanzhi(text) {
  * 转换计算：纯函数，输入文本 + 配置，输出字符串或 null
  * ------------------------------------------------------------------ */
 
-const WEEKDAY_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+/*
+ * 补星期项的星期名。中文必须是两字「周二」——曾经直接复用 i18n 的
+ * WEEKDAY_NAMES.zh（单字「二」，为日历表头宽度而生），结果中文界面输出
+ * 从「周二」变成「二」（v3.32 回归，已修）。两张表各管各的用途，勿合并。
+ * 英文复用 WEEKDAY_NAMES.en，不存第二份。
+ */
+const WEEKDAY_OUT = {
+  zh: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'],
+  en: WEEKDAY_NAMES.en,
+};
 
 /**
  * 相对时间：3 天前 / 2 小时后。
@@ -2068,27 +2195,29 @@ const WEEKDAY_CN = ['周日', '周一', '周二', '周三', '周四', '周五', 
  *   笔记里写下的相对描述过几天再看就对不上了。
  * @param {boolean} [withNote] 是否在结果里附上「（相对 …）」的说明
  */
-function toRelative(date, base, withNote) {
+function toRelative(date, base, withNote, on) {
   const baseMs = base ? base.getTime() : Date.now();
   const diffMs = date.getTime() - baseMs;
   const abs = Math.abs(diffMs);
   const future = diffMs > 0;
   const suffix = future ? '后' : '前';
+  // 英文语序与中文不同（in 3 days / 3 days ago），且要处理单复数。
+  const en = (n, u) => (future ? `in ${n} ${u}${n === 1 ? '' : 's'}` : `${n} ${u}${n === 1 ? '' : 's'} ago`);
 
   let text;
   const mins = Math.round(abs / 60000);
-  if (mins < 1) text = '刚刚';
-  else if (mins < 60) text = `${mins} 分钟${suffix}`;
+  if (mins < 1) text = on ? 'just now' : '刚刚';
+  else if (mins < 60) text = on ? en(mins, 'minute') : `${mins} 分钟${suffix}`;
   else {
     const hours = Math.round(abs / 3600000);
-    if (hours < 24) text = `${hours} 小时${suffix}`;
+    if (hours < 24) text = on ? en(hours, 'hour') : `${hours} 小时${suffix}`;
     else {
       const days = Math.round(abs / 86400000);
-      if (days < 30) text = `${days} 天${suffix}`;
+      if (days < 30) text = on ? en(days, 'day') : `${days} 天${suffix}`;
       else {
         const months = Math.round(days / 30);
-        if (months < 12) text = `${months} 个月${suffix}`;
-        else text = `${Math.round(days / 365)} 年${suffix}`;
+        if (months < 12) text = on ? en(months, 'month') : `${months} 个月${suffix}`;
+        else text = on ? en(Math.round(days / 365), 'year') : `${Math.round(days / 365)} 年${suffix}`;
       }
     }
   }
@@ -2102,8 +2231,8 @@ function toRelative(date, base, withNote) {
    */
   const note = base
     ? fmt(null, base, 'YYYY-MM-DD HH:mm')
-    : `现在 ${fmt(null, new Date(), 'YYYY-MM-DD HH:mm')}`;
-  return `${text}（相对 ${note}）`;
+    : `${on ? 'now' : '现在'} ${fmt(null, new Date(), 'YYYY-MM-DD HH:mm')}`;
+  return on ? `${text} (relative to ${note})` : `${text}（相对 ${note}）`;
 }
 
 /** 用插件统一的 moment 格式化，格式非法时降级为原始 ISO */
@@ -2129,15 +2258,40 @@ function dropSeconds(format) {
  * 精度开关在这里生效：关闭「精确到秒」时，连用户自定义格式里的秒也会被去掉，
  * 避免「明明关了却还有秒」的不一致感。
  */
+/**
+ * 时间转换结果是否用英文输出。
+ * englishOutput 为 null 表示从未设置过 —— 按生效语言默认（中文关、非中文开）；
+ * 用户手动拨过之后以设置值为准，切语言不再被带回默认值。
+ */
+function engOutOn(settings) {
+  const ts = settings && settings.timestamp;
+  if (!ts) return false;
+  if (ts.englishOutput === true || ts.englishOutput === false) return ts.englishOutput;
+  let lang = 'zh';
+  try { lang = effectiveLang(); } catch (e) { lang = 'zh'; }
+  return lang !== 'zh' && lang !== 'zh-TW';
+}
+
+// 星期占位符：先占位再替换，避免依赖 moment 的 [..] 字面量转义（mock 不实现）
+const WD_PH = '\u0001WD\u0001';
+
 function fmt(plugin, date, format) {
+  let ph = '';
   let f = String(format ?? '');
   const ts = plugin && plugin.settings && plugin.settings.timestamp;
   const ext = ts && ts.extensions;
   if (ext && ext.preciseToSecond === false) f = dropSeconds(f);
+  // 英文输出时把星期 token 换成英文短名；moment 的 [..] 是字面量转义，
+  // 否则替换出的 "Sat" 里的 a/t 会被 moment 当格式 token 吃掉。
+  if (engOutOn(plugin && plugin.settings) && /d{3,4}/.test(f)) {
+    const nm = (WEEKDAY_NAMES.en || [])[date.getDay()];
+    if (nm) { f = f.replace(/dddd|ddd/g, WD_PH); ph = nm; }
+  }
 
   try {
     const out = obsidian.moment(date.getTime()).format(f);
-    return out && out !== 'Invalid date' ? out : date.toISOString();
+    const val = out && out !== 'Invalid date' ? out : date.toISOString();
+    return ph ? val.split(WD_PH).join(ph) : val;
   } catch (e) {
     return date.toISOString();
   }
@@ -2593,7 +2747,7 @@ function cm6Restore(id) {
   disposeUndo(rec);
   removeFromNoteList(rec);
   try {
-    new obsidian.Notice('已撤回为原格式');
+    new obsidian.Notice(i18nT('kbc2962a3', '已撤回为原格式'));
   } catch (e) { /* 环境无 Notice */ }
   return true;
 }
@@ -2744,7 +2898,7 @@ function restoreUndo(plugin, id, editor) {
   removeFromNoteList(rec);
   refreshUndoIndicator(plugin);
   try {
-    new obsidian.Notice('已撤回为原格式');
+    new obsidian.Notice(i18nT('kbc2962a3', '已撤回为原格式'));
   } catch (e) { /* 环境无 Notice */ }
   return true;
 }
@@ -2795,6 +2949,29 @@ function clearUndo(plugin) {
   undoMarks.clear();
   undoByNote.clear();
   if (plugin) refreshUndoIndicator(plugin);
+}
+
+/**
+ * 只清**一篇**笔记的撤销栈（批量转换前调用）。
+ *
+ * 不用 clearUndo() 全清：批量只改 this.file，别的笔记的栈仍基于它们自己的正文、
+ * 依然有效，一并清掉等于白丢用户功能（切回去发现撤回按钮没了）。
+ *
+ * 为什么必须清：批量走 vault.modify **绕过插件撤销栈**，改完后栈里旧记录的
+ * 行号 / 列号 / 文本基准全部与当前正文不一致。实测复现 ——
+ * 「同一行两处相同结果文本 + 转换后长度变化」时整行兜底判定不唯一，
+ * 撤回被**静默拒绝**（用户点了没反应，也不知道为什么）。
+ * 批量本身靠 Obsidian 原生 Ctrl+Z 整体回退（Notice 就是这么写的），
+ * 两套撤销体系并存只会互相打架。
+ */
+function clearUndoFor(plugin, notePath) {
+  const list = undoByNote.get(notePath);
+  if (!list || !list.length) return 0;
+  const n = list.length;
+  while (list.length) disposeUndo(list.shift());
+  undoByNote.delete(notePath);
+  if (plugin) refreshUndoIndicator(plugin);
+  return n;
 }
 
 /**
@@ -2984,7 +3161,7 @@ function festivalNameOf(date, settings) {
   }
   const jd = judge;
   for (const f of jd.SOLAR_FESTIVALS) {
-    if (judge.sameDay(validDate(year, f.month, f.day), date)) return f.names[0];
+    if (judge.sameDay(validDate(year, f.month, f.day), date)) return (engOutOn(settings) && f.en) ? f.en : f.names[0];
   }
   for (const f of jd.LUNAR_FESTIVALS) {
     if (judge.sameDay(festivalDate({ kind: 'lunar', month: f.month, day: f.day }, year), date)) {
@@ -3320,7 +3497,7 @@ function computeBuiltin(plugin, key, raw, options) {
       // 基准：面板里填的；没填就是「现在」
       const base = options && options.base;
       const withNote = ext.showRelativeBase !== false; // 默认开
-      return toRelative(date, base, withNote);
+      return toRelative(date, base, withNote, engOutOn(plugin.settings));
     }
     case 'weekday': {
       /*
@@ -3332,7 +3509,8 @@ function computeBuiltin(plugin, key, raw, options) {
       const clean = stripDecorations(raw);
       let f = 'YYYY-MM-DD';
       if (hasClock(clean)) f += hasSeconds(clean) ? ' HH:mm:ss' : ' HH:mm';
-      return `${fmt(plugin, date, f)} ${WEEKDAY_CN[date.getDay()]}`;
+      const wdNames = WEEKDAY_OUT[engOutOn(plugin && plugin.settings) ? 'en' : 'zh'];
+      return `${fmt(plugin, date, f)} ${wdNames[date.getDay()]}`;
     }
     case 'dailyLink':
       return `[[${fmt(plugin, date, ext.dailyLinkFormat)}]]`;
@@ -4164,7 +4342,7 @@ const COMPOSITE_PICK_RE = new RegExp(
     '第[\\d零〇一二两三四五六七八九十]+周' +
     '(?:[\\s的]*周[一二三四五六日天1-7])?' +
     '(?:[\\s的]*(?:早上|上午|中午|下午|傍晚|晚上|深夜|凌晨))?' +
-    '(?:[\\s的]*\\d{1,2}(?:点(?:半|\\d{0,2}分?)?|:\\d{2}))?' +
+    '(?:[\\s的]*\\d{1,2}(?:点(?:半|\\d{0,2}分?)?|[:：]\\d{2}))?' +
   '|' +
     // 后面跟「日」说明是完整日期（2026年09月19日），交给日期规则处理
     '(?:今年|明年|后年|去年|前年|\\d{4}年)[\\s的]*\\d{1,2}月(?:份)?(?!\\s*\\d{1,2}\\s*日)' +
@@ -4251,7 +4429,7 @@ const PICK_PATTERNS = [
   new RegExp(
     '(?:' + WORD_PICK_RE.source + ')' +
     '\\s*(?:[上下午晚早凌晨傍]*)?\\s*\\d{1,2}' +
-    '(?:\\s*点\\s*(?:半|\\d{1,2}\\s*分?)?|:\\d{2})',
+    '(?:\\s*点\\s*(?:半|\\d{1,2}\\s*分?)?|[:：]\\d{2})',
     'i'
   ),
   // 倒装与序数：前两天 / 第七天后 / 二天后
@@ -4369,20 +4547,20 @@ function registerTimeActions(plugin) {
 
       const ext = plugin.settings.timestamp.extensions;
       if (!ext || !ext.enabled) {
-        new obsidian.Notice('时间转换扩展已关闭，可在设置 → 时间戳 里打开');
+        new obsidian.Notice(i18nT('kacae2b99', '时间转换扩展已关闭，可在设置 → 时间戳 里打开'));
         return;
       }
       const app = plugin.app;
       const file = app.workspace && typeof app.workspace.getActiveFile === 'function'
         ? app.workspace.getActiveFile() : null;
       if (!file || !String(file.path || '').endsWith('.md')) {
-        new obsidian.Notice('请先打开一篇 markdown 笔记');
+        new obsidian.Notice(i18nT('k2f642ec0', '请先打开一篇 markdown 笔记'));
         return;
       }
       // 只列已启用的转换项 —— 没开的项不该出现在批量里，否则会转出用户没要的东西
       const defs = (ACTION_DEFS || []).filter((a) => ext[a.key] === true);
       if (!defs.length) {
-        new obsidian.Notice('尚未启用任何转换项，请先在设置 → 时间戳 里打开要用的项');
+        new obsidian.Notice(i18nT('k21cc2dcf', '尚未启用任何转换项，请先在设置 → 时间戳 里打开要用的项'));
         return;
       }
       new BatchConvertModal(plugin, file, defs).open();
@@ -4400,13 +4578,13 @@ function registerTimeActions(plugin) {
 
       const ext = plugin.settings.timestamp.extensions;
       if (!ext || !ext.enabled) {
-        new obsidian.Notice('时间转换扩展已关闭，可在设置 → 时间戳 里打开');
+        new obsidian.Notice(i18nT('kacae2b99', '时间转换扩展已关闭，可在设置 → 时间戳 里打开'));
         return;
       }
 
       const editor = activeEditor(plugin.app);
       if (!editor) {
-        new obsidian.Notice('请先打开一篇笔记，并把光标放在编辑区里');
+        new obsidian.Notice(i18nT('k943ffcaa', '请先打开一篇笔记，并把光标放在编辑区里'));
         return;
       }
 
@@ -4423,7 +4601,7 @@ function registerTimeActions(plugin) {
         }
       }
       if (!raw) {
-        new obsidian.Notice('没找到时间文本。请先选中一个，例如 2026-09-19');
+        new obsidian.Notice(i18nT('k6141fa8e', '没找到时间文本。请先选中一个，例如 2026-09-19'));
         return;
       }
       new TimeActionModal(plugin, editor, raw, range).open();
@@ -4450,17 +4628,17 @@ function registerTimeActions(plugin) {
       if (checking) return true;
       const ext = plugin.settings.timestamp.extensions;
       if (!ext || ext.undoHintEnabled === false) {
-        new obsidian.Notice('撤回提示已关闭，可在设置 → 时间戳 里打开');
+        new obsidian.Notice(i18nT('k9aa78fac', '撤回提示已关闭，可在设置 → 时间戳 里打开'));
         return;
       }
       const editor = activeEditor(plugin.app);
       if (!editor) {
-        new obsidian.Notice('请先打开一篇笔记');
+        new obsidian.Notice(i18nT('k0d9b2547', '请先打开一篇笔记'));
         return;
       }
       // 走记录层定位（行号 + 文本查找），不依赖装饰
       if (!undoLast(plugin, editor)) {
-        new obsidian.Notice('这篇笔记没有可撤回的时间转换了');
+        new obsidian.Notice(i18nT('k6023eee9', '这篇笔记没有可撤回的时间转换了'));
       }
     },
   });
@@ -4487,7 +4665,7 @@ function registerTimeActions(plugin) {
               }
             }
             if (!raw) {
-              new obsidian.Notice('没找到时间文本。请先选中一个，例如 2026-09-19');
+              new obsidian.Notice(i18nT('k6141fa8e', '没找到时间文本。请先选中一个，例如 2026-09-19'));
               return;
             }
             new TimeActionModal(plugin, editor, raw, range).open();
@@ -4511,13 +4689,27 @@ const BATCH_MAX = 200;
  * 不用后行断言（?<!）：老版本 Electron 可能不支持，会直接抛错。
  */
 function collectCandidates(text) {
+  /*
+   * 农历两条的字符类必须与 lunar.js 的解析器对齐，否则会**算出错误的年份**：
+   *   月份缺「正/冬/腊/闰」→ 腊月 / 冬月 / 正月 / 闰月 整条漏转
+   *   日位缺「二」        → 二十 / 十二 整条漏转
+   * 更隐蔽的是年份前缀：解析器支持「2026年八月十九」，但粗筛从「八」起匹配，
+   * 把「2026年」甩在外面，compute() 拿到无年份片段就按**当前农历年**算 ——
+   * 于是「2023年闰二月初五」被改成 2026 年，还留下「2023年闰」残片。
+   * 所以年份与「闰」必须一并吃进来。
+   *
+   * 这是「正则逐处手写、改一处漏一处」的第三次复发，下面那段防截断是兜底。
+   */
+  const LUNAR_MONTH = '[正一二三四五六七八九十冬腊]{1,3}';
+  const LUNAR_DAY = '[初一二三四五六七八九十廿]{1,3}';
   const pats = [
     /\b\d{13}\b/g,
     /\b\d{10}\b/g,
     /\d{4}\s*[-\/.年]\s*\d{1,2}\s*[-\/.月]\s*\d{1,2}(?:\s*[日号])?/g,
     /\d{1,2}\s*[月\/-]\s*\d{1,2}\s*[日号]/g,
-    /[一二三四五六七八九十]{1,3}月[初一三四五六七八九十]{1,3}[日号]?/g,
-    /农历[一二三四五六七八九十\d]{1,3}月[初一三四五六七八九十\d]{1,3}[日号]?/g,
+    // 带可选年份前缀 + 可选「闰」：吃不到年份就会算出错年份，宁可多收也不能截
+    new RegExp('(?:\\d{4}\\s*年\\s*)?(?:闰)?' + LUNAR_MONTH + '月' + LUNAR_DAY + '[日号]?', 'g'),
+    new RegExp('农历(?:\\d{4}\\s*年\\s*)?(?:闰)?[一二三四五六七八九十\\d]{1,3}月[初一三四五六七八九十\\d]{1,3}[日号]?', 'g'),
     /(大后天|大前天|今天|明天|后天|昨天|前天|上周|本周|这周|下周|下下周)[一二三四五六日天1-7]?/g,
     /\d{1,2}[:：]\d{2}([:：]\d{2})?/g,
   ];
@@ -4529,6 +4721,19 @@ function collectCandidates(text) {
       if (m[0]) out.push({ raw: m[0], index: m.index });
     }
   }
+  /*
+   * 防截断兜底：农历片段若前面紧邻「年」或「闰」，说明年份前缀被截在外面。
+   * compute() 对无年份的农历会按当前农历年算，结果是**错值 + 残片**，
+   * 比漏转糟糕得多（用户看不出被改错了）。宁可漏转，不可错值 —— 直接丢弃。
+   * 上面正则已把年份纳入可选前缀，这里是防以后改正则又漏掉。
+   */
+  const kept0 = out.filter((c) => {
+    if (!/[月]/.test(c.raw) || /^\d{4}\s*年/.test(c.raw)) return true;
+    const prev = c.index > 0 ? text.charAt(c.index - 1) : '';
+    return prev !== '年' && prev !== '闰';
+  });
+  out.length = 0;
+  for (let i = 0; i < kept0.length; i++) out.push(kept0[i]);
   // 按位置排；同一位置被多个正则命中时取最长的那个，并丢弃后面重叠的
   out.sort((a, b) => (a.index - b.index) || (b.raw.length - a.raw.length));
   const kept = [];
@@ -4605,7 +4810,12 @@ class BatchConvertModal extends obsidian.Modal {
       tip.setText(
         n === 0
           ? i18nT('k45915354', '这篇笔记里没有可转换的内容（或所选转换项不适用于这些内容）。')
-          : `识别到 ${n} 处${n >= BATCH_MAX ? `（已达上限 ${BATCH_MAX}）` : ''}。确认后一次性替换整篇，可用 Obsidian 自带撤销（Ctrl+Z）回退。`
+          : i18nT(
+            'k9e35e0cd',
+            '识别到 {0} 处{1}。确认后一次性替换整篇，可用 Obsidian 自带撤销（Ctrl+Z）回退。',
+            n,
+            n >= BATCH_MAX ? i18nT('kb90ff5fe', '（已达上限 {0}）', BATCH_MAX) : ''
+          )
       );
       const show = this.hits.slice(0, 30);
       for (let i = 0; i < show.length; i++) {
@@ -4643,10 +4853,12 @@ class BatchConvertModal extends obsidian.Modal {
           if (!this.hits.length) return;
           try {
             const next = applyBatch(this.text, this.hits);
+            // 批量绕过了插件撤销栈：先清掉本篇旧记录，否则撤回会静默失败（见 clearUndoFor）
+            clearUndoFor(this.plugin, this.file && this.file.path);
             await this.plugin.app.vault.modify(this.file, next);
-            new obsidian.Notice(`已替换 ${this.hits.length} 处（可用 Ctrl+Z 回退）`);
+            new obsidian.Notice(i18nT('k6749862c', '已替换 {0} 处（可用 Ctrl+Z 回退）', this.hits.length));
           } catch (e) {
-            new obsidian.Notice('替换失败，笔记未改动。');
+            new obsidian.Notice(i18nT('k2d042983', '替换失败，笔记未改动。'));
           }
           this.close();
         });
@@ -4715,6 +4927,7 @@ module.exports = {
   undoCount,
   undoStackSize,
   clearUndo,
+  clearUndoFor,
   shiftUndoRecords,
   unresolvableUndoCount,
   pickTimeOnLine,

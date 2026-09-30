@@ -282,6 +282,38 @@ ta.clearUndo();
   check('追加模式 original === ""（合法空值）', r2.original === '', JSON.stringify(r2.original));
 }
 
+/* ============ 批量转换与撤销栈（v3.32 §6）============ */
+/*
+ * 复现（实测，非臆断）：批量转换走 vault.modify **绕过插件撤销栈**，
+ * 改完后栈里旧记录的列号 / 文本基准全部失效 ——
+ * 「同一行两处相同结果文本 + 转换后长度变化」时整行兜底判定不唯一，
+ * restoreEntry 返回 null，用户点了撤回**没反应**也不知道为什么。
+ */
+ta.clearUndo();
+{
+  const edB = mkEditor(['2026年9月9日 2026-09-19 2026-09-19']);
+  const recB = ta.recordUndoEntry(P, {
+    editor: edB, line: 0, fromCh: 21,
+    searchText: '2026-09-19', replaceWith: '2026年9月19日', original: '2026年9月19日',
+  });
+  // 模拟批量把行首那处也转了（2026年9月9日 9 字符 → 2026-09-09 10 字符，长度 +1）
+  edB.lines[0] = '2026-09-09 2026-09-19 2026-09-19';
+  const rB = ta.restoreEntry(P, edB, recB);
+  check('批量转换后旧记录撤回被静默拒绝（复现原始缺陷）', rB === null, JSON.stringify(rB));
+
+  // 修法：批量前清掉本篇，栈里不再有基于旧正文的失效记录
+  const cleared = ta.clearUndoFor(P, 'n.md');
+  check('clearUndoFor 返回被清条数', cleared === 1, String(cleared));
+  check('批量前清栈后本篇无撤销记录', ta.undoCount(P) === 0, String(ta.undoCount(P)));
+
+  // 只清指定笔记，不是全清 —— 切回别的笔记不该白丢撤回能力
+  ta.clearUndo();
+  ta.recordUndoEntry(P, { editor: edB, line: 0, fromCh: 0, searchText: 'x', replaceWith: 'y' });
+  check('clearUndoFor 对无关笔记返回 0', ta.clearUndoFor(P, 'other.md') === 0, '');
+  check('clearUndoFor 不影响别的笔记的记录', ta.undoCount(P) === 1, String(ta.undoCount(P)));
+  ta.clearUndo();
+}
+
 ta.clearUndo();
 console.log('\n' + (failures ? `✗ ${failures} 项失败` : '✓ 全部通过'));
 process.exit(failures ? 1 : 0);

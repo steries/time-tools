@@ -85,8 +85,16 @@ const POMO_CSS_TEMPLATE = [
   ".pomo-theme-custom .pomo-btn[data-act='stop'] { order: -1; }",
   '',
   '/* 按段类别上色：focus / rest / idle（暂停沿用暂停前那一段） */',
+  ".pomo-theme-custom[data-pomo-kind='focus'] .pomo-time {",
+  '  color: var(--pomo-focus);',
+  '}',
   ".pomo-theme-custom[data-pomo-kind='rest'] .pomo-time {",
   '  color: var(--pomo-rest);',
+  '}',
+  /* idle = 待开始 / 未运行：装好还没点开始就是它，是用户第一眼看到的状态。
+   * 用暂停色（弱色）打底，想单独配色把值换掉即可。 */
+  ".pomo-theme-custom[data-pomo-kind='idle'] .pomo-time {",
+  '  color: var(--pomo-paused);',
   '}',
 ].join('\n');
 
@@ -211,9 +219,18 @@ const COUNTUP_ICON = {
   count: '－',
 };
 
-/** 毫秒转 MM:SS，秒位补零 */
-function mmss(ms) {
-  const total = Math.max(0, Math.ceil(ms / 1000));
+/**
+ * 毫秒转 MM:SS，秒位补零。
+ *
+ * floor=true 走 floor，正计时专用。默认 ceil 是给倒计时用的（详见下）。
+ * 不要统一用一种：两侧口径必须各自对齐，否则会差出一秒 ——
+ *   tick 判刷新用 floor(1.004)=1，显示若用 ceil(1.004)=2，
+ *   "刚过整秒一点点"的每一帧都被多算一秒，表现为**全程稳定快 1 秒**，
+ *   且刚点开始那一下最刺眼（250ms 就跳到 00:01）。
+ *   倒计时反过来：两侧都是 ceil，所以它是准的 —— 别顺手把倒计时也改成 floor。
+ */
+function mmss(ms, floor) {
+  const total = Math.max(0, floor ? Math.floor(ms / 1000) : Math.ceil(ms / 1000));
   const m = Math.floor(total / 60);
   const s = total % 60;
   return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
@@ -595,12 +612,17 @@ class AskRestartModal extends GuardedModal {
     contentEl.empty();
     contentEl.addClass('pomo-modal');
     contentEl.createEl('h3', { text: i18nT('k8dc0e283', '🍅 本轮已暂停多次') });
+    /* 正计时没有「还剩」的概念，读着别扭 —— 换「已计时」 */
+    const pauseArgs = [
+      this.ctrl.pauseCount,
+      stateName(this.ctrl.pausedFrom) || i18nT('kd4040472', '本段'),
+      mmss(this.ctrl.pausedRemainMs),
+    ];
     contentEl.createDiv({
       cls: 'pomo-modal-desc',
-      text: i18nT('k95cc0ea1', '已暂停 {0} 次，{1}还剩 {2}。要从本轮重新开始计时吗？',
-        this.ctrl.pauseCount,
-        stateName(this.ctrl.pausedFrom) || i18nT('kd4040472', '本段'),
-        mmss(this.ctrl.pausedRemainMs)),
+      text: this.ctrl.countUp
+        ? i18nT('k690fe541', '已暂停 {0} 次，{1}已计时 {2}。要从本轮重新开始计时吗？', ...pauseArgs)
+        : i18nT('k95cc0ea1', '已暂停 {0} 次，{1}还剩 {2}。要从本轮重新开始计时吗？', ...pauseArgs),
     });
 
     const row = contentEl.createDiv({ cls: 'pomo-modal-row' });
@@ -732,7 +754,7 @@ class SummaryModal extends GuardedModal {
     try {
       await this.ctrl.plugin.recorder.record(data);
     } catch (e) {
-      new obsidian.Notice('\u8bb0\u5f55\u5931\u8d25\uff1a' + (e && e.message ? e.message : '\u672a\u77e5\u9519\u8bef'));
+      new obsidian.Notice(i18nT('kcd5744ba', '记录失败：{0}', (e && e.message ? e.message : i18nT('k974e7484', '未知错误'))));
     }
   }
 
@@ -1064,7 +1086,7 @@ class FloatUI {
       this._txt(this.titleEl, 'title', badge.text);
       this._attr('data-mini-kind', badge.kind);
       this._txt(this.miniEl, 'mini', '□');
-      this._paintSet('miniTitle', '恢复窗口', (v) => { this.miniEl.title = v; });
+      this._paintSet('miniTitle', i18nT('kc2c6573c', '恢复窗口'), (v) => { this.miniEl.title = v; });
       this._txt(this.cycleEl, 'cycle', c.displayTime());
       return;
     }
@@ -1816,7 +1838,7 @@ class PomodoroController {
     this.endsAt = Date.now() + this.segmentTotalMs;
     this.clearTicker();
     if (this.settings.notifyOnSegmentEnd) {
-      new obsidian.Notice(state === ST.FOCUS ? '⏸ 休息结束，点开始专注' : '⏸ 专注结束，点开始休息');
+      new obsidian.Notice(state === ST.FOCUS ? i18nT('k6f9f3538', '⏸ 休息结束，点开始专注') : i18nT('k1748c0dd', '⏸ 专注结束，点开始休息'));
     }
     this.refreshUI();
   }
@@ -1947,7 +1969,11 @@ class PomodoroController {
    */
   displayTime() {
     const ms = this.remainMs();
-    return this.countUp && ms >= 3600000 ? hmmss(ms) : mmss(ms);
+    // 正计时一律 floor（含超一小时的 hmmss 分支）：
+    // 跨过一小时时从 mmss 切到 hmmss，若一侧 ceil 一侧 floor，
+    // 切换那一秒节奏会突变（3600000~3600999 整秒都显示 1:00:00）。
+    if (this.countUp) return ms >= 3600000 ? hmmss(ms) : mmss(ms, true);
+    return mmss(ms);
   }
 
   /**
@@ -2024,7 +2050,7 @@ class PomodoroController {
     if (elapsed < targetMin * 60 * 1000) return;
     this.countUpNotified = true;
     if (this.settings.notifyOnSegmentEnd) {
-      new obsidian.Notice(`⏱ 已专注 ${targetMin} 分钟（正计时不自动结束，要结束请点「跳过」）`);
+      new obsidian.Notice(i18nT('k0ffac052', '⏱ 已专注 {0} 分钟（正计时不自动结束，要结束请点「跳过」）', targetMin));
     }
     this.playSound();
   }
@@ -2062,7 +2088,7 @@ class PomodoroController {
       if (finished === ST.LONG) this.longBreaks += 1;
 
       if (this.settings.notifyOnSegmentEnd) {
-        new obsidian.Notice(finished === ST.FOCUS ? '🍅 专注结束，休息一下' : '休息结束，开始专注');
+        new obsidian.Notice(finished === ST.FOCUS ? i18nT('kd847b4e2', '🍅 专注结束，休息一下') : i18nT('k9a53d225', '休息结束，开始专注'));
       }
       this.playSound();
     }
@@ -2725,7 +2751,7 @@ function renderPomodoroSettings(containerEl, plugin, ctrl) {
     .addButton((b) =>
       b.setButtonText(i18nT('k2f4aaddd', '删除')).onClick(async () => {
         if (s.profiles.length <= 1) {
-          new obsidian.Notice('至少保留一个方案');
+          new obsidian.Notice(i18nT('k58088413', '至少保留一个方案'));
           return;
         }
         s.profiles = s.profiles.filter((p) => p.id !== s.activeProfileId);
@@ -3206,7 +3232,7 @@ function renderPomodoroSettings(containerEl, plugin, ctrl) {
       t.setValue(s.showRibbonIcon).onChange(async (v) => {
         s.showRibbonIcon = v;
         await plugin.saveSettings();
-        new obsidian.Notice('重启 Obsidian 后生效');
+        new obsidian.Notice(i18nT('k70a4d215', '重启 Obsidian 后生效'));
       })
     );
 
@@ -3339,7 +3365,7 @@ function renderPomodoroSettings(containerEl, plugin, ctrl) {
         b.setButtonText(i18nT('k75e1781b', '重新扫描')).onClick(async () => {
           await ctrl.refreshSoundFiles();
           plugin.redrawSettingsTab();
-          new obsidian.Notice(`找到 ${ctrl.soundFiles.length} 个音频文件`);
+          new obsidian.Notice(i18nT('k7c4e7751', '找到 {0} 个音频文件', ctrl.soundFiles.length));
         })
       );
   }

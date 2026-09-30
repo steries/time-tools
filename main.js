@@ -265,7 +265,7 @@ const EN = {
   "kc9d36099": "Optional. A folder path inside the vault; empty means the vault root.",
   "k72c41c0e": "e.g. pomodoro-logs",
   "k9d6b52a2": "Write template",
-  "ked22713c": "Placeholders: {{date}} {{time}} {{range}} {{cycles}} {{focus}} {{rest}} {{focusText}} {{restText}} {{pauses}} {{longBreaks}} {{profile}} {{skippedLine}}. {{focus}}/{{rest}} are integer minutes and do not follow the precision switch; {{focusText}}/{{restText}} carry their own unit and follow the \"Record to seconds\" switch above. For the switch to take effect, use {{focusText}} in your template (the default already does); if you customised the template and wrote \"{{focus}} minutes\", change it to {{focusText}} and drop the trailing \"minutes\", or it renders as \"25 min 30 s minutes\".",
+  "ked22713c": "Placeholders: {{date}} {{time}} {{range}} {{cycles}} {{focus}} {{rest}} {{focusText}} {{restText}} {{pauses}} {{longBreaks}} {{profile}} {{skippedLine}}. {{focus}}/{{rest}} are integer minutes and do not follow the precision switch; {{focusText}}/{{restText}} carry their own unit and follow the \"Record to seconds\" switch above. For the switch to take effect, use {{focusText}} in your template (the default already does); if you customised the template and wrote \"{{focus}} minutes\", change it to {{focusText}} and drop the trailing \"minutes\", or it renders as \"25 min 30 s minutes\". The default template is in Chinese - rewrite it yourself if you want English; text written into the note is never translated.",
   "ke7e129e6": "Choose an existing choice",
   "k369f7b53": "Choice name",
   "k9774707e": "Must match the choice name shown in QuickAdd. Press refresh next to it to re-read the list.",
@@ -373,6 +373,12 @@ const EN = {
   "k0b86faea": "…and {0} more",
   "tab.lang": "Interface language",
   "lang.auto": "Follow system (English when undetectable)",
+  "lang.out.name": "Conversion result language",
+  "lang.out.desc":
+    "When on, converted time text is output in English (relative time, weekday names, built-in festival names). This is written into your notes and cannot be reversed — switching the interface back to Chinese will not parse English output.",
+  "lang.out.auto": "Follow interface language (default)",
+  "lang.out.on": "Always output in English",
+  "lang.out.off": "Always output in Chinese",
   "lang.cal.name": "Calendar language",
   "lang.cal.desc":
     "Only affects month and weekday names in the calendar grid. Date format, week start, note content and naming are unaffected.",
@@ -522,6 +528,103 @@ const EN = {
   "fest.help.head": "One per line, in the form: name = date\nSupported date forms:",
   "fest.help.count": "{0} recognised.",
   "fest.help.list": "Recognised: ",
+  "k68381504": "Calendar repair: {0}",
+  "k1aeabe62": "Re-rendered with Templater: {0}",
+  "k197af6ae": "Time Tools calendar is disabled. Turn on the master switch in settings first.",
+  "k22cb0efa": "Failed to open calendar view: {0}",
+  "kee601eab": "Scan failed: {0}",
+  "kbc2962a3": "Reverted to the original format",
+  "kacae2b99": "Time conversion is off. Enable it under Settings → Timestamp.",
+  "k2f642ec0": "Open a Markdown note first",
+  "k21cc2dcf": "No conversion is enabled. Turn on the ones you need under Settings → Timestamp.",
+  "k943ffcaa": "Open a note and put the cursor in the editor first",
+  "k6141fa8e": "No time text found. Select one first, e.g. 2026-09-19",
+  "k9aa78fac": "Revert notice is off. Enable it under Settings → Timestamp.",
+  "k0d9b2547": "Open a note first",
+  "k6023eee9": "No time conversion left to revert in this note",
+  "k6749862c": "Replaced {0} occurrence(s) (Ctrl+Z to undo)",
+  "k2d042983": "Replacement failed; the note is unchanged.",
+  "k1906acec": "Written to {0}",
+  "kba5a9f60": "QuickAdd executed: {0}",
+  "k5dd85e03": "QuickAdd {0}; not recorded (fallback is off)",
+  "ke9c6af0f": "QuickAdd {0}; switched to built-in writing",
+  "k999073d1": "Copied {{VALUE}}",
+  "k5154ae17": "Copy failed",
+  "kd80b67d3": "Cumulative stats are off. Settings → Pomodoro → \"Cumulative stats source\" can switch to \"Parse notes\" or \"Local total\".",
+  "kec519522": "📊 Today {0} ｜ Total {1} ｜ {2} sessions",
+  "k1c2772ff": "No session note found (source = parse notes). Check the note path setting.",
+  "k2bf6a4c6": "📊 Read about {0} from the session note (summed from \"N minutes\"; a changed format may read wrong)",
+  "ka91ddb73": "Failed to read the session note; stats not generated.",
+  "kf6764e61": "Source = custom location, but no path is set. Settings → Pomodoro → \"Custom stats location\".",
+  "k1e7bf534": "No notes read from the custom location: {0}",
+  "kf3a2c081": "📊 Custom location ({0} notes): about {1}",
+  "k4b94496a": "Failed to read the custom location; stats not generated.",
+  "k0885d5b3": "✅ Config exported to the vault root: {0} (copy and rename it yourself to keep more than one)",
+  "ke7d0f71c": "❌ Export failed ({0}): check that the vault is writable, or copy .obsidian/plugins/time-tools/data.json manually",
+  "kdd04120c": "✅ Config imported and applied",
+  "k53869eea": "Calendar view is not open",
+  "k1b49655a": "No note is being edited",
+  "kcda26523": "Open a note first, then put the cursor where you want to insert",
+  "ka283fa1a": "Restored default settings: {0}",
+  "k6f9f3538": "⏸ Break finished — press Start to focus",
+  "k1748c0dd": "⏸ Focus finished — press Start to break",
+  "k0ffac052": "⏱ {0} min focused (count-up does not stop automatically — press \"Skip\" to end)",
+  "kd847b4e2": "🍅 Focus finished — take a break",
+  "k9a53d225": "Break finished — start focusing",
+  "k58088413": "At least one profile must remain",
+  "k70a4d215": "Takes effect after restarting Obsidian",
+  "k7c4e7751": "Found {0} audio file(s)",
+  "k23822f6a": "✅ QuickAdd executed",
+  "k5a1eb678": "\"Take over clicks on the Calendar view\" is on; the two are mutually exclusive by default. To enable both, turn on \"Allow both calendars\".",
+  "kea724970": "Time Tools: could not recognise Calendar's day cells (.day) — Calendar may have changed. Turn off \"Take over clicks on the Calendar view\", or use the Time Tools calendar.",
+  "k3c8de018": "Time Tools: could not recognise Calendar's week column; clicking week numbers may not work. Ignore this if you only use day cells; use the Time Tools calendar for week-number jumps.",
+  "k8f0cab45": "No notes need renaming (all already match the current format, or the four note locations are empty)",
+  "k49ec9b3a": "Renaming done: {0} succeeded, {1} skipped, {2} failed",
+  "kcd5744ba": "Failed to record: {0}",
+  "k332e615a": "🍅 Result copied — press Ctrl+V to insert",
+  "k4d7c45ad": "Copy failed — check clipboard permission",
+  "k3744cfe6": "Time Tools: the {0} module failed to load; other features are unaffected",
+  "kc2c6573c": "Restore window",
+  "k690fe541": "Paused {0} times; {1} has run for {2}. Restart the timer for this round?",
+  "k5ea68de1": "❌ {0}",
+  "kf41e9fe3": "Confirm resetting defaults",
+  "k7a3cc52d": "Reset the settings in “{0}” to their defaults?\n\nThis only affects that section; other sections stay unchanged.",
+  "kc7db6d4f": "Reset",
+  "k6ee49b67": "Disable session log?",
+  "k4699ce36": "After disabling:\n\n",
+  "kfdb7d349": "· Pomodoro endings are no longer logged automatically",
+  "kbefe0380": "· The “Log” button no longer appears in the end dialog",
+  "k2d8ea554": "· The log settings below will collapse",
+  "k90ad143e": "Notes already written are unaffected; all values are kept — just re-enable the toggle to resume.",
+  "k44962493": "Disable anyway",
+  "kc3883589": "These notes will be renamed to the current “date format”. Renaming is done by Obsidian, so internal links update automatically; existing targets are skipped (not overwritten).",
+  "k27347d0a": "…and {0} more",
+  "ka1b02349": "Failed to render the settings page: {0}. Other settings are unaffected.",
+  "k3fcfce8a": "this section",
+  "k6fa1b0d8": "Click to generate/open the monthly note",
+  "k580b8291": "Only one of the two enhancement toggles can be on — the other one was turned off automatically",
+  "kda76fdd8": "Disabled (nothing written)",
+  "kec4153db": "No window",
+  "k9ec53dc6": "Already present, unchanged (dow={0})",
+  "k2b9d893b": "Patched (dow={0}, doy={1})",
+  "k880d5845": "Not initialized (Calendar settings will report dow)",
+  "kdd9b32c2": "Initialized but no dow",
+  "k9304b7fc": "Automatically turned off \"Take over clicks on the Calendar view\"",
+  "k4e3fb620": "Automatically turned off and collapsed the Time Tools calendar",
+  "k2bdb5b32": "Both enhancement toggles were on; kept \"Full takeover\" and turned off \"Native day/week\"",
+  "kf2f3eebc": "Both calendars were on; kept the Time Tools calendar and turned off Calendar enhancement",
+  "k3ec02112": "Both calendars were on; kept Calendar enhancement and turned off the Time Tools calendar",
+  "k6b3a247e": "Templater re-run failed: {0} (see console)",
+  "k86dfe5a3": "Failed to register the Templater listener; templates will not re-run this session",
+  "k3b0d4cef": "Templater is unavailable, cannot re-run templates — install and enable Templater, then retry",
+  "ke0341413": "Templater render failed, nothing was written to the note: {0}",
+  "k105c9ada": "Not valid JSON text",
+  "k4f0f18f5": "Content is not a configuration object",
+  "k5fc2de79": "Apply failed, configuration unchanged",
+  "kfddcd7c6": "Import failed",
+  "k9e35e0cd": "Found {0} occurrence(s){1}. Confirming replaces the whole note at once; use Obsidian undo (Ctrl+Z) to revert.",
+  "kd81bb206": "none",
+  "kb90ff5fe": "(upper limit {0} reached)",
 };
 
 module.exports = EN;
@@ -861,6 +964,40 @@ function renderLangTab(box, plugin) {
     });
 
   /*
+   * 转换结果语言：与显示语言放同一区 —— 用户反馈「开关找不到」。
+   * 它本质是语言决策的延伸，塞进时间戳区没人看得到。
+   * 三态：null=跟随界面语言，true=始终英文，false=始终中文；
+   * 判据用 === true/false，所以用户手动拨过之后切语言不会被带回默认值。
+   */
+  new obsidian.Setting(box)
+    .setName(t('lang.out.name', '转换结果语言'))
+    .setDesc(
+      t(
+        'lang.out.desc',
+        '打开后时间转换的结果会用英文输出（相对时间、星期、内置节日名）。写进笔记后不可逆，切回中文界面解析不了。'
+      )
+    )
+    .addDropdown((d) => {
+      d.addOption('auto', t('lang.out.auto', '跟随界面语言（默认）'));
+      d.addOption('on', t('lang.out.on', '始终用英文输出'));
+      d.addOption('off', t('lang.out.off', '始终用中文输出'));
+      const cur = (((plugin.settings || {}).timestamp) || {}).englishOutput;
+      d.setValue(cur === true ? 'on' : cur === false ? 'off' : 'auto');
+      d.onChange(async (v) => {
+        try {
+          // 拨到 auto 要写回 null（恢复「跟随语言」），不能写布尔
+          plugin.settings.timestamp.englishOutput =
+            v === 'on' ? true : v === 'off' ? false : null;
+          await plugin.saveSettings();
+        } catch (e) {
+          console.error('[Time Tools] 保存转换结果语言失败', e);
+        }
+        // 不重绘设置页：重绘会让下拉失焦（踩坑表老问题）
+        refreshPluginViews(plugin);
+      });
+    });
+
+  /*
    * 日历语言：只管日历网格里的月份名与星期名，与上面的显示语言相互独立。
    * 有人界面用英文、日历想看中文月份，也有人反过来。
    */
@@ -1107,6 +1244,10 @@ function daypartText(key, zh) {
   return DAYPART_EN[key] || zh;
 }
 
+function effectiveLang() {
+  try { return (typeof resolve === 'function' ? resolve(getLang()) : getLang()); } catch (e) { return 'zh'; }
+}
+
 module.exports = {
   LANGS,
   t,
@@ -1127,6 +1268,7 @@ module.exports = {
   daypartText,
   toTW,
   detectSystemLang,
+  effectiveLang,
   matchLang,
   renderLangTab,
 };
@@ -1287,18 +1429,18 @@ function readJudgement(key, settings) {
  */
 
 const SOLAR_FESTIVALS = [
-  { names: ['元旦', '新年'], month: 1, day: 1 },
-  { names: ['情人节'], month: 2, day: 14 },
-  { names: ['植树节'], month: 3, day: 12 },
-  { names: ['劳动节', '五一'], month: 5, day: 1 },
-  { names: ['青年节'], month: 5, day: 4 },
-  { names: ['儿童节'], month: 6, day: 1 },
-  { names: ['建党节', '七一'], month: 7, day: 1 },
-  { names: ['建军节', '八一'], month: 8, day: 1 },
-  { names: ['教师节'], month: 9, day: 10 },
-  { names: ['国庆节', '国庆'], month: 10, day: 1 },
-  { names: ['平安夜'], month: 12, day: 24 },
-  { names: ['圣诞节'], month: 12, day: 25 },
+  { names: ['元旦', '新年'], month: 1, day: 1, en: "New Year's Day", },
+  { names: ['情人节'], month: 2, day: 14, en: "Valentine's Day", },
+  { names: ['植树节'], month: 3, day: 12, en: "Arbor Day", },
+  { names: ['劳动节', '五一'], month: 5, day: 1, en: "Labor Day", },
+  { names: ['青年节'], month: 5, day: 4, en: "Youth Day", },
+  { names: ['儿童节'], month: 6, day: 1, en: "Children's Day", },
+  { names: ['建党节', '七一'], month: 7, day: 1, en: "Party Founding Day", },
+  { names: ['建军节', '八一'], month: 8, day: 1, en: "Army Day", },
+  { names: ['教师节'], month: 9, day: 10, en: "Teachers' Day", },
+  { names: ['国庆节', '国庆'], month: 10, day: 1, en: "National Day", },
+  { names: ['平安夜'], month: 12, day: 24, en: "Christmas Eve", },
+  { names: ['圣诞节'], month: 12, day: 25, en: "Christmas Day", },
 ];
 
 /*
@@ -3040,6 +3182,9 @@ const DEFAULT_SETTINGS = {
     enableSlashCommand: false,
     slashTrigger: 'now', // 自定义触发词（不含斜杠）
     extensions: defaultExtensions(), // 扩展：时间文本转换（总开关 + 逐项开关）
+    // 时间转换结果是否用英文输出（相对时间 / 星期 / 内置节日名）。
+    // null = 从未设置过，按界面语言默认：中文关、非中文开。
+    englishOutput: null,
   },
 
   /* ---- 模块二：番茄钟 ---- */
@@ -3324,12 +3469,12 @@ function addResetButton(containerEl, plugin, keys, label) {
   });
   const btn = wrap.createEl('button', { cls: 'tt-reset-btn', text: i18nT('k3c470548', '恢复默认设置') });
   btn.onclick = async () => {
-    const ok = await confirmReset(plugin, label || '本区');
+    const ok = await confirmReset(plugin, label || i18nT('k3fcfce8a', '本区'));
     if (!ok) return;
     resetSection(plugin, keys);
     await plugin.saveSettings();
     plugin.redrawSettingsTab();
-    new obsidian.Notice(`已恢复默认设置：${label || '本区'}`);
+    new obsidian.Notice(i18nT('ka283fa1a', '已恢复默认设置：{0}', label || i18nT('k3fcfce8a', '本区')));
   };
 }
 
@@ -3364,11 +3509,13 @@ function confirmDialog(plugin, opt) {
 
 function confirmReset(plugin, label) {
   return confirmDialog(plugin, {
-    title: '确认恢复默认设置',
-    content:
-      `确定要把「${label}」这一区的设置恢复为默认值吗？\n\n` +
-      '此操作只影响该分区，其余分区保持不变。',
-    okText: '恢复',
+    title: i18nT('kf41e9fe3', '确认恢复默认设置'),
+    content: i18nT(
+      'k7a3cc52d',
+      '确定要把「{0}」这一区的设置恢复为默认值吗？\n\n此操作只影响该分区，其余分区保持不变。',
+      label
+    ),
+    okText: i18nT('kc7db6d4f', '恢复'),
     warning: true,
   });
 }
@@ -3932,7 +4079,7 @@ class TimeToolsSettingTab extends obsidian.PluginSettingTab {
       this.containerEl.empty();
       this.containerEl.createDiv({
         cls: 'tt-settings-error',
-        text: i18nT('k534ce29d', '设置页渲染失败：') + (e && e.message ? e.message : e) + '。其余设置不受影响。',
+        text: i18nT('ka1b02349', '设置页渲染失败：{0}。其余设置不受影响。', e && e.message ? e.message : e),
       });
     }
   }
@@ -4188,7 +4335,10 @@ module.exports = {
 
   __modules['src/timestamp.js'] = function (module, exports, require) {
 const obsidian = require('obsidian');
-const { t: i18nT } = require('./i18n.js');
+const { t: i18nT,
+  WEEKDAY_NAMES,
+  effectiveLang,
+} = require('./i18n.js');
 const { DEFAULT_SETTINGS, ACTION_DEFS, isLunarKey } = require('./settings.js');
 const { actionText, judgeText, presetText, daypartText, miscText } = require('./i18n.js');
 /*
@@ -5089,6 +5239,76 @@ function parseCNNumber(text) {
 }
 
 /**
+ * 解析英文时刻：8am / 7:30pm / 5 pm / noon / midnight。
+ *
+ * README 明文承诺了这几项，但 src 全目录原本零处 am/pm 处理，
+ * 所以「8am」连 looksLikeRelative 都过不了 —— 转换菜单根本不弹，
+ * 用户看到的是"完全没反应"。与 §6（tomorrow 5pm）同源，共用这一个函数。
+ *
+ * 12 小时制约定：12am = 00:00、12pm = 12:00。
+ * @returns {{hour:number,minute:number}|null}
+ */
+function parseClockEN(text) {
+  const s = String(text ?? '').trim().toLowerCase();
+  if (!s) return null;
+  if (s === 'noon') return { hour: 12, minute: 0 };
+  if (s === 'midnight') return { hour: 0, minute: 0 };
+  const m = /^(\d{1,2})(?:\s*:\s*(\d{2}))?\s*(am|pm)$/.exec(s);
+  if (!m) return null;
+  let h = Number(m[1]);
+  if (h > 12) return null; // 13pm 这种不成立
+  const afternoon = m[3] === 'pm';
+  if (afternoon && h < 12) h += 12;
+  if (!afternoon && h === 12) h = 0;
+  return { hour: h, minute: Number(m[2] || 0) };
+}
+
+/**
+ * 英文「口语日 + 时刻」：tomorrow 5pm / yesterday 3pm / next Monday 10am。
+ * 词表复用 WORD_REL，只把首尾锚定换成前缀匹配，不另抄一份英文词表
+ * （另抄就会出现「改一处漏一处」，这正是本批其它几个 bug 的病根）。
+ */
+function splitEnglishDayClock(text) {
+  const s = String(text ?? '').trim();
+  if (!s) return null;
+  // ① 口语日：tomorrow 5pm / yesterday 3pm
+  for (const w of WORD_REL) {
+    const stem = w.re.source.replace(/^\^/, '').replace(/\$$/, '');
+    const m = new RegExp('^' + stem + '\\s+', 'i').exec(s);
+    if (!m) continue;
+    const clock = parseClockEN(s.slice(m[0].length).trim());
+    if (clock) return { kind: 'ymd', w: w, clock: clock };
+  }
+  /*
+   * ② 英文星期：Monday 3pm / next Monday 10am。
+   * 不带时刻时由 parseEnglishWeekday 处理（下面 2c 之后），但它要求整串只含
+   * 「(next|last|this)? 星期名」，多了时刻就失配 —— 所以这里单独兜。
+   */
+  const wm = /^(?:(next|last|this)\s+)?([a-z]+)\s+(.+)$/i.exec(s);
+  if (wm) {
+    const wd = EN_WEEKDAY[(wm[2] || '').toLowerCase()];
+    const clock = wd ? parseClockEN(wm[3]) : null;
+    if (wd && clock) {
+      const p = (wm[1] || '').toLowerCase();
+      const wo = p === 'next' ? 1 : p === 'last' ? -1 : 0;
+      return { kind: 'weekday', wd: wd, wo: wo, clock: clock };
+    }
+  }
+  return null;
+}
+
+/** 按 WORD_REL 条目的 y/m/d 推进基准日；月份走钳制，避免月末溢出 */
+function applyWordYmd(base, w, raw) {
+  const sign = w.dirFromWord && /^last/i.test(raw) ? -1 : 1;
+  const d = new Date(base.getTime());
+  if (w.y) d.setFullYear(d.getFullYear() + sign * w.y);
+  // 走钳制：01-31 +1月 直接 setMonth 会变 03-03（跨过整个二月）
+  if (w.m) return addMonthsClamped(d, sign * w.m);
+  if (w.d) d.setDate(d.getDate() + sign * w.d);
+  return d;
+}
+
+/**
  * 解析时刻：5点 / 5点半 / 5点30 / 下午5点 / 17点 / 5:30。
  * @returns {{hour:number,minute:number}|null}
  */
@@ -5103,24 +5323,39 @@ function parseClockCN(text, daypartKey) {
    */
   let pm = null; // null = 未指定（按 24 小时制理解）
   let body = s;
+  /*
+   * 「中午」单列，不能简单标成 pm:true —— 那样「中午11点」会变成 23:00（错）。
+   * 中午覆盖 11:00~13:00，所以 11、12 点保持不动，1~10 点按 PM 理解
+   * （中文说「中午1点」就是下午 1 点）。这是口径取舍，已记进启动卡口径表。
+   */
+  let noon = false;
   if (/^(下午|傍晚|晚上|夜里|深夜)/.test(body)) {
     pm = true;
     body = body.replace(/^(下午|傍晚|晚上|夜里|深夜)/, '');
   } else if (/^(上午|早上|早晨|凌晨)/.test(body)) {
     pm = false;
     body = body.replace(/^(上午|早上|早晨|凌晨)/, '');
+  } else if (/^中午/.test(body)) {
+    noon = true;
+    body = body.replace(/^中午/, '');
   }
   if (pm === null && daypartKey) {
     const t = TIME_OF_DAY.find((x) => x.key === daypartKey);
     if (t) pm = t.pm;
+    if (daypartKey === '中午') noon = true;
   }
+  /* PM 换算统一走这里，各返回点不再各写一遍 —— 否则改口径要改六处 */
+  const apm = (h) => (pm && h < 12) ? h + 12 : (noon && h < 11 ? h + 12 : h);
 
   // 5:30 形式
-  let m = /^(\d{1,2}):(\d{2})$/.exec(body);
+  // 冒号必须同时收中英文 —— 中文输入法打出来的是全角「：」。
+  // 裸写「12：45」能认是因为走了 TIME_ONLY_RE 兜底（那里写的是 [:：]），
+  // 一旦带时段/日期前缀就落到这条路径，只认半角就会整条判 null。
+  let m = /^(\d{1,2})[:：](\d{2})$/.exec(body);
   if (m) {
     const h = Number(m[1]);
     if (h > 23 || Number(m[2]) > 59) return null;
-    return { hour: pm && h < 12 ? h + 12 : h, minute: Number(m[2]) };
+    return { hour: apm(h), minute: Number(m[2]) };
   }
 
   /*
@@ -5137,7 +5372,7 @@ function parseClockCN(text, daypartKey) {
       const hh = Math.floor(total / 60);
       const mm = ((total % 60) + 60) % 60;
       if (hh >= 0 && hh <= 23) {
-        return { hour: pm && hh < 12 ? hh + 12 : hh, minute: mm };
+        return { hour: apm(hh), minute: mm };
       }
     }
     return null;
@@ -5150,7 +5385,7 @@ function parseClockCN(text, daypartKey) {
     let hour = /^\d+$/.test(hRaw) ? Number(hRaw) : parseCNNumber(hRaw);
     if (hour !== null && isFinite(hour) && hour <= 23) {
       const ke = { 一: 15, 二: 30, 三: 45 }[m[2]] || 15;
-      if (pm && hour < 12) hour += 12;
+      hour = apm(hour);
       return { hour, minute: ke };
     }
     return null;
@@ -5164,7 +5399,7 @@ function parseClockCN(text, daypartKey) {
     if (hour !== null && isFinite(hour) && hour <= 23) {
       const mm = Number(m[2]);
       if (mm <= 59) {
-        if (pm && hour < 12) hour += 12;
+        hour = apm(hour);
         return { hour, minute: mm };
       }
     }
@@ -5177,7 +5412,7 @@ function parseClockCN(text, daypartKey) {
     let hour = Number(m[1]);
     const mm = Number(m[2]);
     if (hour <= 23 && mm <= 59) {
-      if (pm && hour < 12) hour += 12;
+      hour = apm(hour);
       return { hour, minute: mm };
     }
     return null;
@@ -5192,7 +5427,7 @@ function parseClockCN(text, daypartKey) {
     if (hour === null || !isFinite(hour)) return null;
     if (hour > 23) return null;
     // 中文习惯：「下午5点」→ 17，「下午12点」保持 12
-    if (pm && hour < 12) hour += 12;
+    hour = apm(hour);
 
     let minute = 0;
     if (m[2]) {
@@ -6036,16 +6271,23 @@ function parseRelative(text, base, settings) {
    */
   const bare = parseClockCN(raw);
   if (bare) return withClock(now0, bare.hour, bare.minute, 0);
+  // 纯英文时刻：8am / 7:30pm / noon / midnight（README 承诺）
+  const bareEn = parseClockEN(raw);
+  if (bareEn) return withClock(now0, bareEn.hour, bareEn.minute, 0);
+
+  // ---- 2a-en) 英文口语日 + 时刻：tomorrow 5pm / next Monday 10am ----
+  const edc = splitEnglishDayClock(raw);
+  if (edc) {
+    const base = edc.kind === 'ymd'
+      ? applyWordYmd(now0, edc.w, raw)
+      : resolveWeekday(now0, edc.wd, edc.wo, pluginSettingsForParse);
+    return withClock(base, edc.clock.hour, edc.clock.minute, 0);
+  }
 
   // ---- 2b) 纯英文口语（yesterday / next week …）----
   const w = WORD_REL.find((item) => item.re.test(raw));
   if (w) {
-    let sign = 1;
-    if (w.dirFromWord) sign = /^last/i.test(raw) ? -1 : 1;
-    const d = new Date(now0.getTime());
-    if (w.y) d.setFullYear(d.getFullYear() + sign * w.y);
-    if (w.m) d.setMonth(d.getMonth() + sign * w.m);
-    if (w.d) d.setDate(d.getDate() + sign * w.d);
+    const d = applyWordYmd(now0, w, raw);
 
     // 星期几 / 月底月初 / 固定月日
     // 「周末」的 wd 只是占位，真实值按用户在「时间口径」里选的来
@@ -6059,8 +6301,15 @@ function parseRelative(text, base, settings) {
       d.setDate(w.fixedDay);
       return d;
     }
-    // 英文时段（this morning / last night …）
-    if (w.daypart && convertDaypartAlone(pluginSettingsForParse)) {
+    /*
+     * 英文时段（this morning / last night …）。
+     * 这里**不受** convertDaypartAlone 门控：那个开关管的是「裸时段词」
+     * （单独选中"早上"别给它编 09:00），而 WORD_REL 里带 daypart 的这 8 条
+     * 全都有明确的日期锚点（d/y/m），时段是**限定词**不是模糊词。
+     * 被门控挡住的表现是：中文「明天下午」→ 15:00，英文「tomorrow afternoon」
+     * 却沿用基准时刻 10:00，中英不一致。
+     */
+    if (w.daypart) {
       const h = daypartHour(w.daypart, pluginSettingsForParse);
       return withClock(d, h, 0, 0);
     }
@@ -6138,7 +6387,25 @@ function parseRelative(text, base, settings) {
   return shiftByUnit(now0, m[2], n, (m[4] || '').indexOf('前') >= 0 ? -1 : 1);
 }
 
-/** 按单位推进时间；月/年走日历加法，避免固定天数在月末、闰年出错 */
+/**
+ * 按「月」推进并**钳到该月最后一天**。
+ *
+ * 直接 setMonth 会在月末静默进位：01-31 +1月 → 03-03（跨过了整个二月），
+ * 往回推也一样：03-31 -1月 → 03-03，**日期反而前进了**。
+ * 先归到 1 号再进位，最后钳到目标月的天数，就不会溢出。
+ * 「年」同理：2024-02-29 +1年 → 2025-03-01（次年没有 29 号）。
+ */
+function addMonthsClamped(d, months) {
+  const day = d.getDate();
+  const t = new Date(d.getTime());
+  t.setDate(1); // 先归 1 号，避开溢出
+  t.setMonth(t.getMonth() + months);
+  const last = new Date(t.getFullYear(), t.getMonth() + 1, 0).getDate();
+  t.setDate(Math.min(day, last)); // 钳到该月最后一天
+  return t;
+}
+
+/** 按单位推进时间；月/年走日历加法并钳月末，避免固定天数在月末、闰年出错 */
 function shiftByUnit(now, unit, n, dir) {
   const d = new Date(now.getTime());
   if (unit === '秒') return new Date(d.getTime() + dir * n * 1000);
@@ -6152,12 +6419,10 @@ function shiftByUnit(now, unit, n, dir) {
     return new Date(d.getTime() + dir * n * 15 * 60000);
   }
   if (unit.indexOf('月') >= 0) {
-    d.setMonth(d.getMonth() + dir * n);
-    return d;
+    return addMonthsClamped(d, dir * n);
   }
   if (unit === '年') {
-    d.setFullYear(d.getFullYear() + dir * n);
-    return d;
+    return addMonthsClamped(d, dir * n * 12);
   }
   return null;
 }
@@ -6230,7 +6495,16 @@ function parseGanzhi(text) {
  * 转换计算：纯函数，输入文本 + 配置，输出字符串或 null
  * ------------------------------------------------------------------ */
 
-const WEEKDAY_CN = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+/*
+ * 补星期项的星期名。中文必须是两字「周二」——曾经直接复用 i18n 的
+ * WEEKDAY_NAMES.zh（单字「二」，为日历表头宽度而生），结果中文界面输出
+ * 从「周二」变成「二」（v3.32 回归，已修）。两张表各管各的用途，勿合并。
+ * 英文复用 WEEKDAY_NAMES.en，不存第二份。
+ */
+const WEEKDAY_OUT = {
+  zh: ['周日', '周一', '周二', '周三', '周四', '周五', '周六'],
+  en: WEEKDAY_NAMES.en,
+};
 
 /**
  * 相对时间：3 天前 / 2 小时后。
@@ -6241,27 +6515,29 @@ const WEEKDAY_CN = ['周日', '周一', '周二', '周三', '周四', '周五', 
  *   笔记里写下的相对描述过几天再看就对不上了。
  * @param {boolean} [withNote] 是否在结果里附上「（相对 …）」的说明
  */
-function toRelative(date, base, withNote) {
+function toRelative(date, base, withNote, on) {
   const baseMs = base ? base.getTime() : Date.now();
   const diffMs = date.getTime() - baseMs;
   const abs = Math.abs(diffMs);
   const future = diffMs > 0;
   const suffix = future ? '后' : '前';
+  // 英文语序与中文不同（in 3 days / 3 days ago），且要处理单复数。
+  const en = (n, u) => (future ? `in ${n} ${u}${n === 1 ? '' : 's'}` : `${n} ${u}${n === 1 ? '' : 's'} ago`);
 
   let text;
   const mins = Math.round(abs / 60000);
-  if (mins < 1) text = '刚刚';
-  else if (mins < 60) text = `${mins} 分钟${suffix}`;
+  if (mins < 1) text = on ? 'just now' : '刚刚';
+  else if (mins < 60) text = on ? en(mins, 'minute') : `${mins} 分钟${suffix}`;
   else {
     const hours = Math.round(abs / 3600000);
-    if (hours < 24) text = `${hours} 小时${suffix}`;
+    if (hours < 24) text = on ? en(hours, 'hour') : `${hours} 小时${suffix}`;
     else {
       const days = Math.round(abs / 86400000);
-      if (days < 30) text = `${days} 天${suffix}`;
+      if (days < 30) text = on ? en(days, 'day') : `${days} 天${suffix}`;
       else {
         const months = Math.round(days / 30);
-        if (months < 12) text = `${months} 个月${suffix}`;
-        else text = `${Math.round(days / 365)} 年${suffix}`;
+        if (months < 12) text = on ? en(months, 'month') : `${months} 个月${suffix}`;
+        else text = on ? en(Math.round(days / 365), 'year') : `${Math.round(days / 365)} 年${suffix}`;
       }
     }
   }
@@ -6275,8 +6551,8 @@ function toRelative(date, base, withNote) {
    */
   const note = base
     ? fmt(null, base, 'YYYY-MM-DD HH:mm')
-    : `现在 ${fmt(null, new Date(), 'YYYY-MM-DD HH:mm')}`;
-  return `${text}（相对 ${note}）`;
+    : `${on ? 'now' : '现在'} ${fmt(null, new Date(), 'YYYY-MM-DD HH:mm')}`;
+  return on ? `${text} (relative to ${note})` : `${text}（相对 ${note}）`;
 }
 
 /** 用插件统一的 moment 格式化，格式非法时降级为原始 ISO */
@@ -6302,15 +6578,40 @@ function dropSeconds(format) {
  * 精度开关在这里生效：关闭「精确到秒」时，连用户自定义格式里的秒也会被去掉，
  * 避免「明明关了却还有秒」的不一致感。
  */
+/**
+ * 时间转换结果是否用英文输出。
+ * englishOutput 为 null 表示从未设置过 —— 按生效语言默认（中文关、非中文开）；
+ * 用户手动拨过之后以设置值为准，切语言不再被带回默认值。
+ */
+function engOutOn(settings) {
+  const ts = settings && settings.timestamp;
+  if (!ts) return false;
+  if (ts.englishOutput === true || ts.englishOutput === false) return ts.englishOutput;
+  let lang = 'zh';
+  try { lang = effectiveLang(); } catch (e) { lang = 'zh'; }
+  return lang !== 'zh' && lang !== 'zh-TW';
+}
+
+// 星期占位符：先占位再替换，避免依赖 moment 的 [..] 字面量转义（mock 不实现）
+const WD_PH = '\u0001WD\u0001';
+
 function fmt(plugin, date, format) {
+  let ph = '';
   let f = String(format ?? '');
   const ts = plugin && plugin.settings && plugin.settings.timestamp;
   const ext = ts && ts.extensions;
   if (ext && ext.preciseToSecond === false) f = dropSeconds(f);
+  // 英文输出时把星期 token 换成英文短名；moment 的 [..] 是字面量转义，
+  // 否则替换出的 "Sat" 里的 a/t 会被 moment 当格式 token 吃掉。
+  if (engOutOn(plugin && plugin.settings) && /d{3,4}/.test(f)) {
+    const nm = (WEEKDAY_NAMES.en || [])[date.getDay()];
+    if (nm) { f = f.replace(/dddd|ddd/g, WD_PH); ph = nm; }
+  }
 
   try {
     const out = obsidian.moment(date.getTime()).format(f);
-    return out && out !== 'Invalid date' ? out : date.toISOString();
+    const val = out && out !== 'Invalid date' ? out : date.toISOString();
+    return ph ? val.split(WD_PH).join(ph) : val;
   } catch (e) {
     return date.toISOString();
   }
@@ -6766,7 +7067,7 @@ function cm6Restore(id) {
   disposeUndo(rec);
   removeFromNoteList(rec);
   try {
-    new obsidian.Notice('已撤回为原格式');
+    new obsidian.Notice(i18nT('kbc2962a3', '已撤回为原格式'));
   } catch (e) { /* 环境无 Notice */ }
   return true;
 }
@@ -6917,7 +7218,7 @@ function restoreUndo(plugin, id, editor) {
   removeFromNoteList(rec);
   refreshUndoIndicator(plugin);
   try {
-    new obsidian.Notice('已撤回为原格式');
+    new obsidian.Notice(i18nT('kbc2962a3', '已撤回为原格式'));
   } catch (e) { /* 环境无 Notice */ }
   return true;
 }
@@ -6968,6 +7269,29 @@ function clearUndo(plugin) {
   undoMarks.clear();
   undoByNote.clear();
   if (plugin) refreshUndoIndicator(plugin);
+}
+
+/**
+ * 只清**一篇**笔记的撤销栈（批量转换前调用）。
+ *
+ * 不用 clearUndo() 全清：批量只改 this.file，别的笔记的栈仍基于它们自己的正文、
+ * 依然有效，一并清掉等于白丢用户功能（切回去发现撤回按钮没了）。
+ *
+ * 为什么必须清：批量走 vault.modify **绕过插件撤销栈**，改完后栈里旧记录的
+ * 行号 / 列号 / 文本基准全部与当前正文不一致。实测复现 ——
+ * 「同一行两处相同结果文本 + 转换后长度变化」时整行兜底判定不唯一，
+ * 撤回被**静默拒绝**（用户点了没反应，也不知道为什么）。
+ * 批量本身靠 Obsidian 原生 Ctrl+Z 整体回退（Notice 就是这么写的），
+ * 两套撤销体系并存只会互相打架。
+ */
+function clearUndoFor(plugin, notePath) {
+  const list = undoByNote.get(notePath);
+  if (!list || !list.length) return 0;
+  const n = list.length;
+  while (list.length) disposeUndo(list.shift());
+  undoByNote.delete(notePath);
+  if (plugin) refreshUndoIndicator(plugin);
+  return n;
 }
 
 /**
@@ -7157,7 +7481,7 @@ function festivalNameOf(date, settings) {
   }
   const jd = judge;
   for (const f of jd.SOLAR_FESTIVALS) {
-    if (judge.sameDay(validDate(year, f.month, f.day), date)) return f.names[0];
+    if (judge.sameDay(validDate(year, f.month, f.day), date)) return (engOutOn(settings) && f.en) ? f.en : f.names[0];
   }
   for (const f of jd.LUNAR_FESTIVALS) {
     if (judge.sameDay(festivalDate({ kind: 'lunar', month: f.month, day: f.day }, year), date)) {
@@ -7493,7 +7817,7 @@ function computeBuiltin(plugin, key, raw, options) {
       // 基准：面板里填的；没填就是「现在」
       const base = options && options.base;
       const withNote = ext.showRelativeBase !== false; // 默认开
-      return toRelative(date, base, withNote);
+      return toRelative(date, base, withNote, engOutOn(plugin.settings));
     }
     case 'weekday': {
       /*
@@ -7505,7 +7829,8 @@ function computeBuiltin(plugin, key, raw, options) {
       const clean = stripDecorations(raw);
       let f = 'YYYY-MM-DD';
       if (hasClock(clean)) f += hasSeconds(clean) ? ' HH:mm:ss' : ' HH:mm';
-      return `${fmt(plugin, date, f)} ${WEEKDAY_CN[date.getDay()]}`;
+      const wdNames = WEEKDAY_OUT[engOutOn(plugin && plugin.settings) ? 'en' : 'zh'];
+      return `${fmt(plugin, date, f)} ${wdNames[date.getDay()]}`;
     }
     case 'dailyLink':
       return `[[${fmt(plugin, date, ext.dailyLinkFormat)}]]`;
@@ -8337,7 +8662,7 @@ const COMPOSITE_PICK_RE = new RegExp(
     '第[\\d零〇一二两三四五六七八九十]+周' +
     '(?:[\\s的]*周[一二三四五六日天1-7])?' +
     '(?:[\\s的]*(?:早上|上午|中午|下午|傍晚|晚上|深夜|凌晨))?' +
-    '(?:[\\s的]*\\d{1,2}(?:点(?:半|\\d{0,2}分?)?|:\\d{2}))?' +
+    '(?:[\\s的]*\\d{1,2}(?:点(?:半|\\d{0,2}分?)?|[:：]\\d{2}))?' +
   '|' +
     // 后面跟「日」说明是完整日期（2026年09月19日），交给日期规则处理
     '(?:今年|明年|后年|去年|前年|\\d{4}年)[\\s的]*\\d{1,2}月(?:份)?(?!\\s*\\d{1,2}\\s*日)' +
@@ -8424,7 +8749,7 @@ const PICK_PATTERNS = [
   new RegExp(
     '(?:' + WORD_PICK_RE.source + ')' +
     '\\s*(?:[上下午晚早凌晨傍]*)?\\s*\\d{1,2}' +
-    '(?:\\s*点\\s*(?:半|\\d{1,2}\\s*分?)?|:\\d{2})',
+    '(?:\\s*点\\s*(?:半|\\d{1,2}\\s*分?)?|[:：]\\d{2})',
     'i'
   ),
   // 倒装与序数：前两天 / 第七天后 / 二天后
@@ -8542,20 +8867,20 @@ function registerTimeActions(plugin) {
 
       const ext = plugin.settings.timestamp.extensions;
       if (!ext || !ext.enabled) {
-        new obsidian.Notice('时间转换扩展已关闭，可在设置 → 时间戳 里打开');
+        new obsidian.Notice(i18nT('kacae2b99', '时间转换扩展已关闭，可在设置 → 时间戳 里打开'));
         return;
       }
       const app = plugin.app;
       const file = app.workspace && typeof app.workspace.getActiveFile === 'function'
         ? app.workspace.getActiveFile() : null;
       if (!file || !String(file.path || '').endsWith('.md')) {
-        new obsidian.Notice('请先打开一篇 markdown 笔记');
+        new obsidian.Notice(i18nT('k2f642ec0', '请先打开一篇 markdown 笔记'));
         return;
       }
       // 只列已启用的转换项 —— 没开的项不该出现在批量里，否则会转出用户没要的东西
       const defs = (ACTION_DEFS || []).filter((a) => ext[a.key] === true);
       if (!defs.length) {
-        new obsidian.Notice('尚未启用任何转换项，请先在设置 → 时间戳 里打开要用的项');
+        new obsidian.Notice(i18nT('k21cc2dcf', '尚未启用任何转换项，请先在设置 → 时间戳 里打开要用的项'));
         return;
       }
       new BatchConvertModal(plugin, file, defs).open();
@@ -8573,13 +8898,13 @@ function registerTimeActions(plugin) {
 
       const ext = plugin.settings.timestamp.extensions;
       if (!ext || !ext.enabled) {
-        new obsidian.Notice('时间转换扩展已关闭，可在设置 → 时间戳 里打开');
+        new obsidian.Notice(i18nT('kacae2b99', '时间转换扩展已关闭，可在设置 → 时间戳 里打开'));
         return;
       }
 
       const editor = activeEditor(plugin.app);
       if (!editor) {
-        new obsidian.Notice('请先打开一篇笔记，并把光标放在编辑区里');
+        new obsidian.Notice(i18nT('k943ffcaa', '请先打开一篇笔记，并把光标放在编辑区里'));
         return;
       }
 
@@ -8596,7 +8921,7 @@ function registerTimeActions(plugin) {
         }
       }
       if (!raw) {
-        new obsidian.Notice('没找到时间文本。请先选中一个，例如 2026-09-19');
+        new obsidian.Notice(i18nT('k6141fa8e', '没找到时间文本。请先选中一个，例如 2026-09-19'));
         return;
       }
       new TimeActionModal(plugin, editor, raw, range).open();
@@ -8623,17 +8948,17 @@ function registerTimeActions(plugin) {
       if (checking) return true;
       const ext = plugin.settings.timestamp.extensions;
       if (!ext || ext.undoHintEnabled === false) {
-        new obsidian.Notice('撤回提示已关闭，可在设置 → 时间戳 里打开');
+        new obsidian.Notice(i18nT('k9aa78fac', '撤回提示已关闭，可在设置 → 时间戳 里打开'));
         return;
       }
       const editor = activeEditor(plugin.app);
       if (!editor) {
-        new obsidian.Notice('请先打开一篇笔记');
+        new obsidian.Notice(i18nT('k0d9b2547', '请先打开一篇笔记'));
         return;
       }
       // 走记录层定位（行号 + 文本查找），不依赖装饰
       if (!undoLast(plugin, editor)) {
-        new obsidian.Notice('这篇笔记没有可撤回的时间转换了');
+        new obsidian.Notice(i18nT('k6023eee9', '这篇笔记没有可撤回的时间转换了'));
       }
     },
   });
@@ -8660,7 +8985,7 @@ function registerTimeActions(plugin) {
               }
             }
             if (!raw) {
-              new obsidian.Notice('没找到时间文本。请先选中一个，例如 2026-09-19');
+              new obsidian.Notice(i18nT('k6141fa8e', '没找到时间文本。请先选中一个，例如 2026-09-19'));
               return;
             }
             new TimeActionModal(plugin, editor, raw, range).open();
@@ -8684,13 +9009,27 @@ const BATCH_MAX = 200;
  * 不用后行断言（?<!）：老版本 Electron 可能不支持，会直接抛错。
  */
 function collectCandidates(text) {
+  /*
+   * 农历两条的字符类必须与 lunar.js 的解析器对齐，否则会**算出错误的年份**：
+   *   月份缺「正/冬/腊/闰」→ 腊月 / 冬月 / 正月 / 闰月 整条漏转
+   *   日位缺「二」        → 二十 / 十二 整条漏转
+   * 更隐蔽的是年份前缀：解析器支持「2026年八月十九」，但粗筛从「八」起匹配，
+   * 把「2026年」甩在外面，compute() 拿到无年份片段就按**当前农历年**算 ——
+   * 于是「2023年闰二月初五」被改成 2026 年，还留下「2023年闰」残片。
+   * 所以年份与「闰」必须一并吃进来。
+   *
+   * 这是「正则逐处手写、改一处漏一处」的第三次复发，下面那段防截断是兜底。
+   */
+  const LUNAR_MONTH = '[正一二三四五六七八九十冬腊]{1,3}';
+  const LUNAR_DAY = '[初一二三四五六七八九十廿]{1,3}';
   const pats = [
     /\b\d{13}\b/g,
     /\b\d{10}\b/g,
     /\d{4}\s*[-\/.年]\s*\d{1,2}\s*[-\/.月]\s*\d{1,2}(?:\s*[日号])?/g,
     /\d{1,2}\s*[月\/-]\s*\d{1,2}\s*[日号]/g,
-    /[一二三四五六七八九十]{1,3}月[初一三四五六七八九十]{1,3}[日号]?/g,
-    /农历[一二三四五六七八九十\d]{1,3}月[初一三四五六七八九十\d]{1,3}[日号]?/g,
+    // 带可选年份前缀 + 可选「闰」：吃不到年份就会算出错年份，宁可多收也不能截
+    new RegExp('(?:\\d{4}\\s*年\\s*)?(?:闰)?' + LUNAR_MONTH + '月' + LUNAR_DAY + '[日号]?', 'g'),
+    new RegExp('农历(?:\\d{4}\\s*年\\s*)?(?:闰)?[一二三四五六七八九十\\d]{1,3}月[初一三四五六七八九十\\d]{1,3}[日号]?', 'g'),
     /(大后天|大前天|今天|明天|后天|昨天|前天|上周|本周|这周|下周|下下周)[一二三四五六日天1-7]?/g,
     /\d{1,2}[:：]\d{2}([:：]\d{2})?/g,
   ];
@@ -8702,6 +9041,19 @@ function collectCandidates(text) {
       if (m[0]) out.push({ raw: m[0], index: m.index });
     }
   }
+  /*
+   * 防截断兜底：农历片段若前面紧邻「年」或「闰」，说明年份前缀被截在外面。
+   * compute() 对无年份的农历会按当前农历年算，结果是**错值 + 残片**，
+   * 比漏转糟糕得多（用户看不出被改错了）。宁可漏转，不可错值 —— 直接丢弃。
+   * 上面正则已把年份纳入可选前缀，这里是防以后改正则又漏掉。
+   */
+  const kept0 = out.filter((c) => {
+    if (!/[月]/.test(c.raw) || /^\d{4}\s*年/.test(c.raw)) return true;
+    const prev = c.index > 0 ? text.charAt(c.index - 1) : '';
+    return prev !== '年' && prev !== '闰';
+  });
+  out.length = 0;
+  for (let i = 0; i < kept0.length; i++) out.push(kept0[i]);
   // 按位置排；同一位置被多个正则命中时取最长的那个，并丢弃后面重叠的
   out.sort((a, b) => (a.index - b.index) || (b.raw.length - a.raw.length));
   const kept = [];
@@ -8778,7 +9130,12 @@ class BatchConvertModal extends obsidian.Modal {
       tip.setText(
         n === 0
           ? i18nT('k45915354', '这篇笔记里没有可转换的内容（或所选转换项不适用于这些内容）。')
-          : `识别到 ${n} 处${n >= BATCH_MAX ? `（已达上限 ${BATCH_MAX}）` : ''}。确认后一次性替换整篇，可用 Obsidian 自带撤销（Ctrl+Z）回退。`
+          : i18nT(
+            'k9e35e0cd',
+            '识别到 {0} 处{1}。确认后一次性替换整篇，可用 Obsidian 自带撤销（Ctrl+Z）回退。',
+            n,
+            n >= BATCH_MAX ? i18nT('kb90ff5fe', '（已达上限 {0}）', BATCH_MAX) : ''
+          )
       );
       const show = this.hits.slice(0, 30);
       for (let i = 0; i < show.length; i++) {
@@ -8816,10 +9173,12 @@ class BatchConvertModal extends obsidian.Modal {
           if (!this.hits.length) return;
           try {
             const next = applyBatch(this.text, this.hits);
+            // 批量绕过了插件撤销栈：先清掉本篇旧记录，否则撤回会静默失败（见 clearUndoFor）
+            clearUndoFor(this.plugin, this.file && this.file.path);
             await this.plugin.app.vault.modify(this.file, next);
-            new obsidian.Notice(`已替换 ${this.hits.length} 处（可用 Ctrl+Z 回退）`);
+            new obsidian.Notice(i18nT('k6749862c', '已替换 {0} 处（可用 Ctrl+Z 回退）', this.hits.length));
           } catch (e) {
-            new obsidian.Notice('替换失败，笔记未改动。');
+            new obsidian.Notice(i18nT('k2d042983', '替换失败，笔记未改动。'));
           }
           this.close();
         });
@@ -8888,6 +9247,7 @@ module.exports = {
   undoCount,
   undoStackSize,
   clearUndo,
+  clearUndoFor,
   shiftUndoRecords,
   unresolvableUndoCount,
   pickTimeOnLine,
@@ -8947,10 +9307,12 @@ const SYNC_KEYS = [
   'countUpBaseMs',
   'countUpStartAt',
   'countUpRemindCount',
+  /* 软目标只响一次，不同步的话镜像接管后会再弹一次 */
+  'countUpNotified',
 ];
 
 /** 布尔型同步字段（applySnapshot 不能走 num()，否则 true 会变成 1，=== true 的判断全失效） */
-const BOOL_KEYS = ['countUp'];
+const BOOL_KEYS = ['countUp', 'countUpNotified'];
 
 function num(v) {
   return typeof v === 'number' && isFinite(v) ? v : 0;
@@ -9518,7 +9880,7 @@ class Recorder {
 
     const existing = await vault.read(file);
     await vault.modify(file, insertAtTop(existing, this.buildContent(data)));
-    new obsidian.Notice(`已写入 ${path}`);
+    new obsidian.Notice(i18nT('k1906acec', '已写入 {0}', path));
     return path;
   }
 
@@ -9632,7 +9994,7 @@ class Recorder {
     const text = this.buildContent(data);
     const ok = await copyToClipboard(text);
     new obsidian.Notice(
-      ok ? '🍅 结果已复制，Ctrl+V 即可插入' : '复制失败，请检查剪贴板权限',
+      ok ? i18nT('k332e615a', '🍅 结果已复制，Ctrl+V 即可插入') : i18nT('k4d7c45ad', '复制失败，请检查剪贴板权限'),
       5000
     );
     return ok;
@@ -9658,16 +10020,16 @@ class Recorder {
 
       const r = await this.runQuickAdd(data);
       if (r.ok) {
-        new obsidian.Notice(`已执行 QuickAdd：${this.settings.quickAddChoice}`);
+        new obsidian.Notice(i18nT('kba5a9f60', '已执行 QuickAdd：{0}', this.settings.quickAddChoice));
         return null;
       }
 
       // 联动失败：按开关决定是回退内置写入，还是直接放弃
       if (!this.settings.fallbackToBuiltin) {
-        new obsidian.Notice(`QuickAdd ${r.message}；未记录（回退已关闭）`, 8000);
+        new obsidian.Notice(i18nT('k5dd85e03', 'QuickAdd {0}；未记录（回退已关闭）', r.message), 8000);
         return null;
       }
-      new obsidian.Notice(`QuickAdd ${r.message}；已改用内置写入`, 8000);
+      new obsidian.Notice(i18nT('ke9c6af0f', 'QuickAdd {0}；已改用内置写入', r.message), 8000);
     }
 
     return this.writeToNote(noteName || this.settings.defaultNoteName, data);
@@ -9680,16 +10042,16 @@ class Recorder {
  */
 function confirmDisableRecord(plugin, s) {
   const lines = [
-    '· 番茄结束不再自动记录',
-    '· 结束弹窗不再显示「记录」按钮',
-    '· 下方的记录设置会折叠收起',
+    i18nT('kfdb7d349', '· 番茄结束不再自动记录'),
+    i18nT('kbefe0380', '· 结束弹窗不再显示「记录」按钮'),
+    i18nT('k2d8ea554', '· 下方的记录设置会折叠收起'),
     '',
-    '已经写进笔记的记录不受影响；各项设置的值也会保留，重新打开总开关即可恢复。',
+    i18nT('k90ad143e', '已经写进笔记的记录不受影响；各项设置的值也会保留，重新打开总开关即可恢复。'),
   ];
   return confirmDialog(plugin, {
-    title: '确定关闭会话记录？',
-    content: '关闭后将：\n\n' + lines.join('\n'),
-    okText: '仍然关闭',
+    title: i18nT('k6ee49b67', '确定关闭会话记录？'),
+    content: i18nT('k4699ce36', '关闭后将：\n\n') + lines.join('\n'),
+    okText: i18nT('k44962493', '仍然关闭'),
     warning: true,
   });
 }
@@ -9819,7 +10181,7 @@ function renderRecordSettings(containerEl, plugin) {
 
     new obsidian.Setting(body)
       .setName(i18nT('k9d6b52a2', '写入模板'))
-      .setDesc(i18nT('ked22713c', "占位符：{{date}} {{time}} {{range}} {{cycles}} {{focus}} {{rest}} {{focusText}} {{restText}} {{pauses}} {{longBreaks}} {{profile}} {{skippedLine}}。{{focus}}/{{rest}} 是整数分钟，不随精度开关变化；{{focusText}}/{{restText}} 自带单位，精度跟随上面的「记录到秒」开关。想让开关生效，模板里要用 {{focusText}}（默认模板已是）；若你自定义过模板且写的是「{{focus}} 分钟」，改成 {{focusText}} 即可 —— 注意去掉后面的「分钟」二字，否则会渲染成「25 分 30 秒 分钟」。"))
+      .setDesc(i18nT('ked22713c', "占位符：{{date}} {{time}} {{range}} {{cycles}} {{focus}} {{rest}} {{focusText}} {{restText}} {{pauses}} {{longBreaks}} {{profile}} {{skippedLine}}。{{focus}}/{{rest}} 是整数分钟，不随精度开关变化；{{focusText}}/{{restText}} 自带单位，精度跟随上面的「记录到秒」开关。想让开关生效，模板里要用 {{focusText}}（默认模板已是）；若你自定义过模板且写的是「{{focus}} 分钟」，改成 {{focusText}} 即可 —— 注意去掉后面的「分钟」二字，否则会渲染成「25 分 30 秒 分钟」。默认模板为中文，如需英文请自行改写；写入笔记的内容不会被翻译。"))
       .addTextArea((t) =>
         t.setValue(s.template).onChange(async (v) => {
           s.template = v;
@@ -9948,7 +10310,7 @@ function renderRecordSettings(containerEl, plugin) {
       .addButton((b) =>
         b.setButtonText(i18nT('k72a75f35', '复制 {{VALUE}}')).onClick(async () => {
           const ok = await copyToClipboard('{{VALUE}}');
-          new obsidian.Notice(ok ? '已复制 {{VALUE}}' : '复制失败');
+          new obsidian.Notice(ok ? i18nT('k999073d1', '已复制 {{VALUE}}') : i18nT('k5154ae17', '复制失败'));
         })
       );
 
@@ -9959,7 +10321,7 @@ function renderRecordSettings(containerEl, plugin) {
       .addButton((b) =>
         b.setButtonText(i18nT('k1a6aa24e', '执行')).onClick(async () => {
           const r = await plugin.recorder.testQuickAdd();
-          new obsidian.Notice(r.ok ? '✅ QuickAdd 执行成功' : `❌ ${r.message}`, 10000);
+          new obsidian.Notice(r.ok ? i18nT('k23822f6a', '✅ QuickAdd 执行成功') : i18nT('k5ea68de1', '❌ {0}', r.message), 10000);
         })
       );
   };
@@ -10139,14 +10501,14 @@ async function showStats(plugin) {
   const p = plugin && plugin.settings && plugin.settings.pomodoro;
   const src = (p && p.statsSource) || 'off';
   if (src === 'off') {
-    new obsidian.Notice('累计统计当前关闭。设置 → 番茄钟 →「累计统计数据源」可切换为「解析笔记」或「本机累计」。');
+    new obsidian.Notice(i18nT('kd80b67d3', '累计统计当前关闭。设置 → 番茄钟 →「累计统计数据源」可切换为「解析笔记」或「本机累计」。'));
     return { ok: false, reason: 'off' };
   }
   if (src === 'memory') {
     const sm = (p && p.statsMemory) || {};
     const today = obsidian.moment().format('YYYY-MM-DD');
     const t = sm.todayDate === today ? Number(sm.todayFocusMs) : 0;
-    new obsidian.Notice(`📊 今日专注 ${fmtDur(t)}　｜　累计 ${fmtDur(Number(sm.totalFocusMs))}　｜　 ${Number(sm.sessions) || 0} 次会话`);
+    new obsidian.Notice(i18nT('kec519522', '📊 今日专注 {0}　｜　累计 {1}　｜　 {2} 次会话', fmtDur(t), fmtDur(Number(sm.totalFocusMs)), Number(sm.sessions) || 0));
     return { ok: true, source: 'memory' };
   }
   if (src === 'custom') {
@@ -10159,15 +10521,15 @@ async function showStats(plugin) {
     const path = rec.notePath || '';
     const file = vault && path ? vault.getAbstractFileByPath(path) : null;
     if (!file) {
-      new obsidian.Notice('没找到会话记录笔记（数据源＝解析笔记）。请确认记录笔记路径设置正确。');
+      new obsidian.Notice(i18nT('k1c2772ff', '没找到会话记录笔记（数据源＝解析笔记）。请确认记录笔记路径设置正确。'));
       return { ok: false, reason: 'no-note' };
     }
     const text = await vault.cachedRead(file);
     const total = sumMinutes(text);
-    new obsidian.Notice(`📊 从记录笔记读到约 ${fmtDur(total * 60000)}（按笔记中「N 分钟」累加，格式改过会读不准）`);
+    new obsidian.Notice(i18nT('k2bf6a4c6', '📊 从记录笔记读到约 {0}（按笔记中「N 分钟」累加，格式改过会读不准）', fmtDur(total * 60000)));
     return { ok: true, source: 'note', minutes: total };
   } catch (e) {
-    new obsidian.Notice('读取会话记录笔记失败，统计未生成。');
+    new obsidian.Notice(i18nT('ka91ddb73', '读取会话记录笔记失败，统计未生成。'));
     return { ok: false, reason: 'read-failed' };
   }
 }
@@ -10183,7 +10545,7 @@ async function readCustomStats(plugin) {
   const p = plugin && plugin.settings && plugin.settings.pomodoro;
   const path = normalizePath((p && p.statsCustomPath) || '');
   if (!path) {
-    new obsidian.Notice('数据源＝自定义位置，但没填路径。设置 → 番茄钟 →「自定义统计位置」。');
+    new obsidian.Notice(i18nT('kf6764e61', '数据源＝自定义位置，但没填路径。设置 → 番茄钟 →「自定义统计位置」。'));
     return { ok: false, reason: 'empty-path' };
   }
   const vault = plugin.app && plugin.app.vault;
@@ -10199,17 +10561,17 @@ async function readCustomStats(plugin) {
       files = vault.getFiles().filter((f) => f.path.startsWith(prefix) && f.extension === 'md');
     }
     if (!files.length) {
-      new obsidian.Notice(`自定义位置没读到任何笔记：${path}`);
+      new obsidian.Notice(i18nT('k1e7bf534', '自定义位置没读到任何笔记：{0}', path));
       return { ok: false, reason: 'no-file' };
     }
     let total = 0;
     for (let i = 0; i < files.length; i++) {
       total += sumMinutes(await vault.cachedRead(files[i]));
     }
-    new obsidian.Notice(`📊 自定义位置（${files.length} 篇）读到约 ${fmtDur(total * 60000)}`);
+    new obsidian.Notice(i18nT('kf3a2c081', '📊 自定义位置（{0} 篇）读到约 {1}', files.length, fmtDur(total * 60000)));
     return { ok: true, source: 'custom', minutes: total, files: files.length };
   } catch (e) {
-    new obsidian.Notice('读取自定义位置失败，统计未生成。');
+    new obsidian.Notice(i18nT('k4b94496a', '读取自定义位置失败，统计未生成。'));
     return { ok: false, reason: 'read-failed' };
   }
 }
@@ -10317,8 +10679,16 @@ const POMO_CSS_TEMPLATE = [
   ".pomo-theme-custom .pomo-btn[data-act='stop'] { order: -1; }",
   '',
   '/* 按段类别上色：focus / rest / idle（暂停沿用暂停前那一段） */',
+  ".pomo-theme-custom[data-pomo-kind='focus'] .pomo-time {",
+  '  color: var(--pomo-focus);',
+  '}',
   ".pomo-theme-custom[data-pomo-kind='rest'] .pomo-time {",
   '  color: var(--pomo-rest);',
+  '}',
+  /* idle = 待开始 / 未运行：装好还没点开始就是它，是用户第一眼看到的状态。
+   * 用暂停色（弱色）打底，想单独配色把值换掉即可。 */
+  ".pomo-theme-custom[data-pomo-kind='idle'] .pomo-time {",
+  '  color: var(--pomo-paused);',
   '}',
 ].join('\n');
 
@@ -10443,9 +10813,18 @@ const COUNTUP_ICON = {
   count: '－',
 };
 
-/** 毫秒转 MM:SS，秒位补零 */
-function mmss(ms) {
-  const total = Math.max(0, Math.ceil(ms / 1000));
+/**
+ * 毫秒转 MM:SS，秒位补零。
+ *
+ * floor=true 走 floor，正计时专用。默认 ceil 是给倒计时用的（详见下）。
+ * 不要统一用一种：两侧口径必须各自对齐，否则会差出一秒 ——
+ *   tick 判刷新用 floor(1.004)=1，显示若用 ceil(1.004)=2，
+ *   "刚过整秒一点点"的每一帧都被多算一秒，表现为**全程稳定快 1 秒**，
+ *   且刚点开始那一下最刺眼（250ms 就跳到 00:01）。
+ *   倒计时反过来：两侧都是 ceil，所以它是准的 —— 别顺手把倒计时也改成 floor。
+ */
+function mmss(ms, floor) {
+  const total = Math.max(0, floor ? Math.floor(ms / 1000) : Math.ceil(ms / 1000));
   const m = Math.floor(total / 60);
   const s = total % 60;
   return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
@@ -10827,12 +11206,17 @@ class AskRestartModal extends GuardedModal {
     contentEl.empty();
     contentEl.addClass('pomo-modal');
     contentEl.createEl('h3', { text: i18nT('k8dc0e283', '🍅 本轮已暂停多次') });
+    /* 正计时没有「还剩」的概念，读着别扭 —— 换「已计时」 */
+    const pauseArgs = [
+      this.ctrl.pauseCount,
+      stateName(this.ctrl.pausedFrom) || i18nT('kd4040472', '本段'),
+      mmss(this.ctrl.pausedRemainMs),
+    ];
     contentEl.createDiv({
       cls: 'pomo-modal-desc',
-      text: i18nT('k95cc0ea1', '已暂停 {0} 次，{1}还剩 {2}。要从本轮重新开始计时吗？',
-        this.ctrl.pauseCount,
-        stateName(this.ctrl.pausedFrom) || i18nT('kd4040472', '本段'),
-        mmss(this.ctrl.pausedRemainMs)),
+      text: this.ctrl.countUp
+        ? i18nT('k690fe541', '已暂停 {0} 次，{1}已计时 {2}。要从本轮重新开始计时吗？', ...pauseArgs)
+        : i18nT('k95cc0ea1', '已暂停 {0} 次，{1}还剩 {2}。要从本轮重新开始计时吗？', ...pauseArgs),
     });
 
     const row = contentEl.createDiv({ cls: 'pomo-modal-row' });
@@ -10964,7 +11348,7 @@ class SummaryModal extends GuardedModal {
     try {
       await this.ctrl.plugin.recorder.record(data);
     } catch (e) {
-      new obsidian.Notice('\u8bb0\u5f55\u5931\u8d25\uff1a' + (e && e.message ? e.message : '\u672a\u77e5\u9519\u8bef'));
+      new obsidian.Notice(i18nT('kcd5744ba', '记录失败：{0}', (e && e.message ? e.message : i18nT('k974e7484', '未知错误'))));
     }
   }
 
@@ -11296,7 +11680,7 @@ class FloatUI {
       this._txt(this.titleEl, 'title', badge.text);
       this._attr('data-mini-kind', badge.kind);
       this._txt(this.miniEl, 'mini', '□');
-      this._paintSet('miniTitle', '恢复窗口', (v) => { this.miniEl.title = v; });
+      this._paintSet('miniTitle', i18nT('kc2c6573c', '恢复窗口'), (v) => { this.miniEl.title = v; });
       this._txt(this.cycleEl, 'cycle', c.displayTime());
       return;
     }
@@ -12048,7 +12432,7 @@ class PomodoroController {
     this.endsAt = Date.now() + this.segmentTotalMs;
     this.clearTicker();
     if (this.settings.notifyOnSegmentEnd) {
-      new obsidian.Notice(state === ST.FOCUS ? '⏸ 休息结束，点开始专注' : '⏸ 专注结束，点开始休息');
+      new obsidian.Notice(state === ST.FOCUS ? i18nT('k6f9f3538', '⏸ 休息结束，点开始专注') : i18nT('k1748c0dd', '⏸ 专注结束，点开始休息'));
     }
     this.refreshUI();
   }
@@ -12179,7 +12563,11 @@ class PomodoroController {
    */
   displayTime() {
     const ms = this.remainMs();
-    return this.countUp && ms >= 3600000 ? hmmss(ms) : mmss(ms);
+    // 正计时一律 floor（含超一小时的 hmmss 分支）：
+    // 跨过一小时时从 mmss 切到 hmmss，若一侧 ceil 一侧 floor，
+    // 切换那一秒节奏会突变（3600000~3600999 整秒都显示 1:00:00）。
+    if (this.countUp) return ms >= 3600000 ? hmmss(ms) : mmss(ms, true);
+    return mmss(ms);
   }
 
   /**
@@ -12256,7 +12644,7 @@ class PomodoroController {
     if (elapsed < targetMin * 60 * 1000) return;
     this.countUpNotified = true;
     if (this.settings.notifyOnSegmentEnd) {
-      new obsidian.Notice(`⏱ 已专注 ${targetMin} 分钟（正计时不自动结束，要结束请点「跳过」）`);
+      new obsidian.Notice(i18nT('k0ffac052', '⏱ 已专注 {0} 分钟（正计时不自动结束，要结束请点「跳过」）', targetMin));
     }
     this.playSound();
   }
@@ -12294,7 +12682,7 @@ class PomodoroController {
       if (finished === ST.LONG) this.longBreaks += 1;
 
       if (this.settings.notifyOnSegmentEnd) {
-        new obsidian.Notice(finished === ST.FOCUS ? '🍅 专注结束，休息一下' : '休息结束，开始专注');
+        new obsidian.Notice(finished === ST.FOCUS ? i18nT('kd847b4e2', '🍅 专注结束，休息一下') : i18nT('k9a53d225', '休息结束，开始专注'));
       }
       this.playSound();
     }
@@ -12957,7 +13345,7 @@ function renderPomodoroSettings(containerEl, plugin, ctrl) {
     .addButton((b) =>
       b.setButtonText(i18nT('k2f4aaddd', '删除')).onClick(async () => {
         if (s.profiles.length <= 1) {
-          new obsidian.Notice('至少保留一个方案');
+          new obsidian.Notice(i18nT('k58088413', '至少保留一个方案'));
           return;
         }
         s.profiles = s.profiles.filter((p) => p.id !== s.activeProfileId);
@@ -13438,7 +13826,7 @@ function renderPomodoroSettings(containerEl, plugin, ctrl) {
       t.setValue(s.showRibbonIcon).onChange(async (v) => {
         s.showRibbonIcon = v;
         await plugin.saveSettings();
-        new obsidian.Notice('重启 Obsidian 后生效');
+        new obsidian.Notice(i18nT('k70a4d215', '重启 Obsidian 后生效'));
       })
     );
 
@@ -13571,7 +13959,7 @@ function renderPomodoroSettings(containerEl, plugin, ctrl) {
         b.setButtonText(i18nT('k75e1781b', '重新扫描')).onClick(async () => {
           await ctrl.refreshSoundFiles();
           plugin.redrawSettingsTab();
-          new obsidian.Notice(`找到 ${ctrl.soundFiles.length} 个音频文件`);
+          new obsidian.Notice(i18nT('k7c4e7751', '找到 {0} 个音频文件', ctrl.soundFiles.length));
         })
       );
   }
@@ -13757,14 +14145,14 @@ function targetDow(settings) {
  */
 function applyCalendarWeekSpec(settings) {
   const cal = settings && settings.calendar;
-  if (!cal || cal.calendarFixEnabled === false) return '已关闭（未做任何写入）';
+  if (!cal || cal.calendarFixEnabled === false) return i18nT('kda76fdd8', '已关闭（未做任何写入）');
 
-  if (typeof window === 'undefined') return '无 window';
+  if (typeof window === 'undefined') return i18nT('kec4153db', '无 window');
 
   // 边界 1：已存在就完全不动，Calendar 自己的配置优先
   if (window._bundledLocaleWeekSpec) {
     const cur = window._bundledLocaleWeekSpec.dow;
-    return `已存在，未改动（dow=${typeof cur === 'undefined' ? '无' : cur}）`;
+    return i18nT('k9ec53dc6', '已存在，未改动（dow={0}）', typeof cur === 'undefined' ? i18nT('kd81bb206', '无') : cur);
   }
 
   // 边界 2：只写这一个变量，绝不动 moment 的全局 locale
@@ -13774,16 +14162,16 @@ function applyCalendarWeekSpec(settings) {
    * 而 Calendar 会拿这个 spec 去 defineLocale，周数和模板日期都会算偏。
    */
   window._bundledLocaleWeekSpec = { dow, doy: weekDoyOf(dow) };
-  return `已补上（dow=${dow}, doy=${weekDoyOf(dow)}）`;
+  return i18nT('k2b9d893b', '已补上（dow={0}, doy={1}）', dow, weekDoyOf(dow));
 }
 
 /** 设置页状态显示用：当前周起始（只读） */
 function weekSpecStatus() {
-  if (typeof window === 'undefined') return '无 window';
+  if (typeof window === 'undefined') return i18nT('kec4153db', '无 window');
   const spec = window._bundledLocaleWeekSpec;
-  if (!spec) return '未初始化（Calendar 设置页会报 dow）';
+  if (!spec) return i18nT('k880d5845', '未初始化（Calendar 设置页会报 dow）');
   const dow = spec.dow;
-  return typeof dow === 'undefined' ? '已初始化但无 dow' : `dow=${dow}`;
+  return typeof dow === 'undefined' ? i18nT('kdd9b32c2', '已初始化但无 dow') : `dow=${dow}`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -13977,12 +14365,12 @@ function enforceExclusive(plugin, keep) {
   if (!cal || cal.allowBoth === true) return null;
   if (keep === 'own' && cal.enhanceCalendarEnabled === true) {
     cal.enhanceCalendarEnabled = false;
-    return '已自动关闭「在 Calendar 视图上接管点击」';
+    return i18nT('k9304b7fc', '已自动关闭「在 Calendar 视图上接管点击」');
   }
   if (keep === 'enhance' && cal.ownCalendarEnabled === true) {
     cal.ownCalendarEnabled = false;
     closeOwnCalendar(plugin);
-    return '已自动关闭并收起 time tools 日历';
+    return i18nT('k4e3fb620', '已自动关闭并收起 time tools 日历');
   }
   return null;
 }
@@ -14009,7 +14397,7 @@ function normalizeEnhanceExclusive(plugin) {
   const cal = plugin.settings && plugin.settings.calendar;
   if (!cal || cal.nativeDayWeek !== true || cal.enhanceCalendarEnabled !== true) return null;
   cal.nativeDayWeek = false;
-  return '两个增强开关此前同时开启，已保留「全接管」、关闭「日/周用 Calendar 原生」';
+  return i18nT('k2bdb5b32', '两个增强开关此前同时开启，已保留「全接管」、关闭「日/周用 Calendar 原生」');
 }
 
 function normalizeCalendarExclusive(plugin) {
@@ -14021,10 +14409,10 @@ function normalizeCalendarExclusive(plugin) {
   let note;
   if (isCalendarOpen(plugin)) {
     cal.enhanceCalendarEnabled = false;
-    note = '两个日历此前同时开启，已保留 time tools 日历、关闭 Calendar 增强';
+    note = i18nT('kf2f3eebc', '两个日历此前同时开启，已保留 time tools 日历、关闭 Calendar 增强');
   } else {
     cal.ownCalendarEnabled = false;
-    note = '两个日历此前同时开启，已保留 Calendar 增强、关闭 time tools 日历';
+    note = i18nT('k3ec02112', '两个日历此前同时开启，已保留 Calendar 增强、关闭 time tools 日历');
   }
   // 无论保留哪个，总开关一旦为 false 就把视图收起（含布局恢复出来的）
   if (cal.ownCalendarEnabled !== true) closeOwnCalendar(plugin);
@@ -14103,7 +14491,7 @@ function setEnhanceMode(plugin, mode) {
   cal.nativeDayWeek = mode === 'dayweek';
   cal.enhanceCalendarEnabled = mode === 'full';
 
-  let note = wasOther ? '两个增强开关只能开一个：已自动关闭另一个' : null;
+  let note = wasOther ? i18nT('k580b8291', '两个增强开关只能开一个：已自动关闭另一个') : null;
   // 任一增强模式开启时，与 time tools 日历仍按 allowBoth 互斥
   if (mode !== 'none') {
     const n2 = enforceExclusive(plugin, 'enhance');
@@ -14165,7 +14553,7 @@ function renderBugFoldSection(containerEl, plugin) {
       b.setButtonText(i18nT('k5b0520a9', '应用')).setCta().onClick(async () => {
         const r = applyCalendarWeekSpec(plugin.settings);
         status.setText(i18nT('kbc7fdc3c', '当前：{0}（本次：{1}）', weekSpecStatus(), r));
-        new obsidian.Notice('日历修复：' + r);
+        new obsidian.Notice(i18nT('k68381504', '日历修复：{0}', r));
       })
     );
 
@@ -14238,14 +14626,14 @@ function registerTemplaterBridge(plugin) {
         bridgeNewNote(plugin, file).catch((e) => {
           console.warn('[Time Tools] Templater 桥接失败', e);
           notifyOnce(
-            'Templater 补跑失败：' + (e && e.message ? e.message : e) + '（详见控制台）'
+            i18nT('k6b3a247e', 'Templater 补跑失败：{0}（详见控制台）', (e && e.message ? e.message : e))
           );
         });
       })
     );
   } catch (e) {
     console.warn('[Time Tools] Templater 桥接注册失败', e);
-    notifyOnce('Templater 补跑监听注册失败，本次启动不会自动补跑模板');
+    notifyOnce(i18nT('k86dfe5a3', 'Templater 补跑监听注册失败，本次启动不会自动补跑模板'));
   }
 }
 
@@ -14357,7 +14745,7 @@ async function bridgeNewNote(plugin, file) {
   const t = noteMod.getTemplater(plugin.app);
   if (!t) {
     console.warn('[Time Tools] Templater 不可用，无法补跑模板：', file.path);
-    notifyOnce('Templater 不可用，无法补跑模板 —— 请安装并启用 Templater 后重试');
+    notifyOnce(i18nT('k3b0d4cef', 'Templater 不可用，无法补跑模板 —— 请安装并启用 Templater 后重试'));
     return bail('Templater 未安装或未初始化');
   }
 
@@ -14385,7 +14773,7 @@ async function bridgeNewNote(plugin, file) {
       const after = await plugin.app.vault.cachedRead(file);
       if (String(after).indexOf('<%') < 0) {
         bridgedPaths.set(file.path, now);
-        new obsidian.Notice('已用 Templater 重新渲染：' + (file.basename || file.path));
+        new obsidian.Notice(i18nT('k1aeabe62', '已用 Templater 重新渲染：{0}', (file.basename || file.path)));
         return ok();
       }
     }
@@ -14416,7 +14804,7 @@ async function bridgeNewNote(plugin, file) {
   } catch (e) {
     console.warn('[Time Tools] Templater 渲染失败，未写入任何内容：', file.path, e);
     notify(
-      'Templater 渲染失败，笔记未写入任何内容：' + (file.basename || file.path)
+      i18nT('ke0341413', 'Templater 渲染失败，笔记未写入任何内容：{0}', (file.basename || file.path))
     );
     return bail('Templater 渲染抛错：' + (e && e.message ? e.message : String(e)));
   }
@@ -14425,7 +14813,7 @@ async function bridgeNewNote(plugin, file) {
   bridgedPaths.set(file.path, now);
   // 必须覆盖写，不能用 append：追加会让模板内容在笔记里出现两份
   await plugin.app.vault.modify(file, String(rendered));
-  new obsidian.Notice('已用 Templater 重新渲染：' + (file.basename || file.path));
+  new obsidian.Notice(i18nT('k1aeabe62', '已用 Templater 重新渲染：{0}', (file.basename || file.path)));
   return ok();
 }
 
@@ -14450,7 +14838,7 @@ async function openOwnCalendar(plugin) {
    */
   const cal = plugin.settings && plugin.settings.calendar;
   if (!cal || cal.ownCalendarEnabled !== true) {
-    new obsidian.Notice('time tools 日历未启用，请先在设置里打开总开关');
+    new obsidian.Notice(i18nT('k197af6ae', 'time tools 日历未启用，请先在设置里打开总开关'));
     return false;
   }
   /*
@@ -14459,7 +14847,7 @@ async function openOwnCalendar(plugin) {
    */
   if (cal.allowBoth !== true && cal.enhanceCalendarEnabled === true) {
     new obsidian.Notice(
-      '已启用「在 Calendar 视图上接管点击」，两者默认互斥。如需同时开启，请打开「允许同时开启两个日历」。'
+      i18nT('k5a1eb678', '已启用「在 Calendar 视图上接管点击」，两者默认互斥。如需同时开启，请打开「允许同时开启两个日历」。')
     );
     return false;
   }
@@ -14473,7 +14861,7 @@ async function openOwnCalendar(plugin) {
     if (leaf) ws.revealLeaf(leaf);
     return true;
   } catch (e) {
-    new obsidian.Notice('打开日历视图失败：' + (e && e.message ? e.message : e));
+    new obsidian.Notice(i18nT('k22cb0efa', '打开日历视图失败：{0}', (e && e.message ? e.message : e)));
     return false;
   }
 }
@@ -14755,7 +15143,7 @@ class CalendarNoteView extends obsidian.ItemView {
        */
       text: MONTH_NAMES[calLang(((this.plugin && this.plugin.settings
         && this.plugin.settings.calendar) || {}).lang)][this.month],
-      title: '点击生成/打开月记',
+      title: i18nT('k6fa1b0d8', '点击生成/打开月记'),
     });
     mBtn.onclick = () => {
       this.picked = new Date(this.year, this.month, 1);
@@ -14914,15 +15302,20 @@ class CalendarNoteView extends obsidian.ItemView {
         this.drawLunar(cell, d, !!file);
       } else if (file) {
         cell.addClass('has-note');
+        let dotCount = 0;
         // 圆点开关关闭时不做任何字数读取，省掉一整轮异步 IO
         if (this.plugin.settings.calendar.dotsEnabled !== false) {
           const cnt = notes.cachedWordCount(file);
           if (cnt > 0) cell.addClass('has-words');
           // 实心 = 已写满的整点，空心 = 正在写的那一点
-          this.drawDots(cell, this.dotPattern(cnt, true));
+          dotCount = this.drawDots(cell, this.dotPattern(cnt, true));
           // 未缓存的异步补读，读到后重绘（首帧先占位）
           if (!notes.hasWordCount(file) && !this.pendingRead) this.readWordsAsync();
         }
+        /* 兜底圆点：原先用 CSS :has() 判定，但移动端（Capacitor，非 Electron）
+         * 支持不一致 —— 桌面正常、Android 可能一颗不出现且**不报错**，极难发现。
+         * 改由 class 判定，视觉完全一致。只在此处加，重绘时格子重建会自动重算。 */
+        if (dotCount === 0) cell.addClass('tt-cal-need-dot');
       }
       cell.onclick = () => {
         this.picked = d;
@@ -15004,6 +15397,7 @@ class CalendarNoteView extends obsidian.ItemView {
     for (let k = 0; k < pattern.hollow; k++) {
       wrap.createDiv({ cls: 'tt-cal-dot is-hollow' });
     }
+    return (pattern.solid || 0) + (pattern.hollow || 0);
   }
 
   /**
@@ -15646,9 +16040,7 @@ function attachCalendarEnhance(plugin) {
     if (!enhanceWarned && box.querySelectorAll('.day').length === 0) {
       enhanceWarned = true;
       new obsidian.Notice(
-        'Time Tools：未能识别 Calendar 的日期格（.day），' +
-        '可能是 Calendar 改版。请关闭「在 Calendar 视图上接管点击」，' +
-        '或改用 time tools 日历。'
+        i18nT('kea724970', 'Time Tools：未能识别 Calendar 的日期格（.day），可能是 Calendar 改版。请关闭「在 Calendar 视图上接管点击」，或改用 time tools 日历。')
       );
       console.warn('[Time Tools] Calendar 增强选择器失效：容器内未找到 .day');
     }
@@ -15662,8 +16054,7 @@ function attachCalendarEnhance(plugin) {
       if (!enhanceWeekWarned && box.querySelectorAll(WEEK_NUM_SELECTOR).length === 0) {
         enhanceWeekWarned = true;
         new obsidian.Notice(
-          'Time Tools：未能识别 Calendar 的周列，周数点击可能失效。' +
-          '若你只用日期格可忽略；需要周数跳转请改用 time tools 日历。'
+          i18nT('k3c8de018', 'Time Tools：未能识别 Calendar 的周列，周数点击可能失效。若你只用日期格可忽略；需要周数跳转请改用 time tools 日历。')
         );
         console.warn('[Time Tools] Calendar 增强周列选择器失效：容器内未找到 ' + WEEK_NUM_SELECTOR);
       }
@@ -15978,12 +16369,12 @@ function runNoteRenameFlow(plugin) {
   try {
     list = scanNoteRenames(app, plugin.settings);
   } catch (e) {
-    new obsidian.Notice('扫描失败：' + ((e && e.message) || e));
+    new obsidian.Notice(i18nT('kee601eab', '扫描失败：{0}', ((e && e.message) || e)));
     return;
   }
   if (!list.length) {
     new obsidian.Notice(
-      '没有需要改名的笔记（都已与当前格式一致，或四类笔记的存放位置为空）'
+      i18nT('k8f0cab45', '没有需要改名的笔记（都已与当前格式一致，或四类笔记的存放位置为空）')
     );
     return;
   }
@@ -15993,8 +16384,7 @@ function runNoteRenameFlow(plugin) {
   const box = modal.contentEl;
   box.createDiv({
     cls: 'tt-tip',
-    text: i18nT('kcf7c9e2b', '以下笔记将改成当前「日期格式」。改名由 Obsidian 执行，站内链接会自动更新；')
-      + '目标已存在的会跳过（不覆盖）。',
+    text: i18nT('kc3883589', '以下笔记将改成当前「日期格式」。改名由 Obsidian 执行，站内链接会自动更新；目标已存在的会跳过（不覆盖）。'),
   });
 
   const ul = box.createEl('ul', { cls: 'tt-rename-list' });
@@ -16002,7 +16392,7 @@ function runNoteRenameFlow(plugin) {
     ul.createEl('li', { text: it.from + '  →  ' + it.to });
   });
   if (list.length > RENAME_PREVIEW_MAX) {
-    ul.createEl('li', { text: i18nT('ka9b35478', '……另有 ') + (list.length - RENAME_PREVIEW_MAX) + ' 个' });
+    ul.createEl('li', { text: i18nT('k27347d0a', '……另有 {0} 个', list.length - RENAME_PREVIEW_MAX) });
   }
 
   const row = box.createDiv({ cls: 'tt-rename-actions' });
@@ -16012,8 +16402,7 @@ function runNoteRenameFlow(plugin) {
     modal.close();
     const r = await applyNoteRenames(app, list);
     new obsidian.Notice(
-      '改名完成：成功 ' + r.ok.length + '，跳过 ' + r.skipped.length
-        + '，失败 ' + r.failed.length
+      i18nT('k49ec9b3a', '改名完成：成功 {0}，跳过 {1}，失败 {2}', r.ok.length, r.skipped.length, r.failed.length)
     );
   });
   modal.open();
@@ -17049,9 +17438,9 @@ async function importConfig(plugin, text) {
 async function runExport(plugin) {
   const r = await exportConfig(plugin);
   if (r.ok) {
-    new obsidian.Notice(`✅ 配置已导出到库根目录：${r.path}（想留多份请自行复制改名）`);
+    new obsidian.Notice(i18nT('k0885d5b3', '✅ 配置已导出到库根目录：{0}（想留多份请自行复制改名）', r.path));
   } else {
-    new obsidian.Notice(`❌ 导出失败（${r.reason}）：请检查库是否可写，或手动复制 .obsidian/plugins/time-tools/data.json`);
+    new obsidian.Notice(i18nT('ke7d0f71c', '❌ 导出失败（{0}）：请检查库是否可写，或手动复制 .obsidian/plugins/time-tools/data.json', r.reason));
   }
   return r;
 }
@@ -17084,14 +17473,14 @@ function runImport(plugin) {
       ok.addEventListener('click', async () => {
         const r = await importConfig(plugin, this.value);
         if (r.ok) {
-          new obsidian.Notice('✅ 配置已导入并应用');
+          new obsidian.Notice(i18nT('kdd04120c', '✅ 配置已导入并应用'));
           if (plugin.redrawSettingsTab) plugin.redrawSettingsTab();
         } else {
           const msg = {
-            'bad-json': '不是合法的 JSON 文本',
-            'not-object': '内容不是一个配置对象',
-            'apply-failed': '应用失败，配置未改动',
-          }[r.reason] || '导入失败';
+            'bad-json': i18nT('k105c9ada', '不是合法的 JSON 文本'),
+            'not-object': i18nT('k4f0f18f5', '内容不是一个配置对象'),
+            'apply-failed': i18nT('k5fc2de79', '应用失败，配置未改动'),
+          }[r.reason] || i18nT('kfddcd7c6', '导入失败');
           new obsidian.Notice(`❌ ${msg}`);
         }
         this.close();
@@ -17159,7 +17548,7 @@ const {
 const { registerConfigIO } = require('./configio.js');
 const { isPopoutWindow, applyPopoutWindowSoon } = require('./pomowin.js');
 /* 界面语言：零依赖模块，必须早于 settings.js（其默认值含 uiLang） */
-const { setLang } = require('./i18n.js');
+const { setLang, t: i18nT } = require('./i18n.js');
 
 /*
  * 模块注册统一入口 —— 新增模块的唯一接入方式。
@@ -17179,7 +17568,7 @@ function registerModule(spec) {
     console.error('[Time Tools] ' + spec.name + '模块注册失败', e);
     try {
       new obsidian.Notice(
-        'Time Tools：' + spec.name + '模块加载失败，其余功能不受影响'
+        i18nT('k3744cfe6', 'Time Tools：{0}模块加载失败，其余功能不受影响', spec.name)
       );
     } catch (_) {
       /* Notice 不可用时不得二次抛错，否则 onload 会中断 */
@@ -17247,7 +17636,7 @@ class TimeToolsPlugin extends obsidian.Plugin {
           if (!isCalendarOpen(this)) return false;
           if (!checking) {
             const ok = closeOwnCalendar(this);
-            if (!ok) new obsidian.Notice('日历视图当前未打开');
+            if (!ok) new obsidian.Notice(i18nT('k53869eea', '日历视图当前未打开'));
           }
           return true;
         },
@@ -17449,7 +17838,7 @@ class TimeToolsPlugin extends obsidian.Plugin {
   /** 在光标处插入时间戳；有选区时替换选区 */
   insertIntoEditor(editor) {
     if (!editor) {
-      new obsidian.Notice('没有正在编辑的笔记');
+      new obsidian.Notice(i18nT('k1b49655a', '没有正在编辑的笔记'));
       return;
     }
     const text = this.formatNow() + (this.settings.timestamp.insertNewline ? '\n' : '');
@@ -17460,7 +17849,7 @@ class TimeToolsPlugin extends obsidian.Plugin {
   insertTimestamp() {
     const editor = this.getActiveEditor();
     if (!editor) {
-      new obsidian.Notice('请先打开一个笔记，再把光标放到要插入的位置');
+      new obsidian.Notice(i18nT('kcda26523', '请先打开一个笔记，再把光标放到要插入的位置'));
       return;
     }
     this.insertIntoEditor(editor);

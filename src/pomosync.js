@@ -56,10 +56,12 @@ const SYNC_KEYS = [
   'countUpBaseMs',
   'countUpStartAt',
   'countUpRemindCount',
+  /* 软目标只响一次，不同步的话镜像接管后会再弹一次 */
+  'countUpNotified',
 ];
 
 /** 布尔型同步字段（applySnapshot 不能走 num()，否则 true 会变成 1，=== true 的判断全失效） */
-const BOOL_KEYS = ['countUp'];
+const BOOL_KEYS = ['countUp', 'countUpNotified'];
 
 function num(v) {
   return typeof v === 'number' && isFinite(v) ? v : 0;

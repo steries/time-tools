@@ -350,6 +350,40 @@ function renderLangTab(box, plugin) {
     });
 
   /*
+   * 转换结果语言：与显示语言放同一区 —— 用户反馈「开关找不到」。
+   * 它本质是语言决策的延伸，塞进时间戳区没人看得到。
+   * 三态：null=跟随界面语言，true=始终英文，false=始终中文；
+   * 判据用 === true/false，所以用户手动拨过之后切语言不会被带回默认值。
+   */
+  new obsidian.Setting(box)
+    .setName(t('lang.out.name', '转换结果语言'))
+    .setDesc(
+      t(
+        'lang.out.desc',
+        '打开后时间转换的结果会用英文输出（相对时间、星期、内置节日名）。写进笔记后不可逆，切回中文界面解析不了。'
+      )
+    )
+    .addDropdown((d) => {
+      d.addOption('auto', t('lang.out.auto', '跟随界面语言（默认）'));
+      d.addOption('on', t('lang.out.on', '始终用英文输出'));
+      d.addOption('off', t('lang.out.off', '始终用中文输出'));
+      const cur = (((plugin.settings || {}).timestamp) || {}).englishOutput;
+      d.setValue(cur === true ? 'on' : cur === false ? 'off' : 'auto');
+      d.onChange(async (v) => {
+        try {
+          // 拨到 auto 要写回 null（恢复「跟随语言」），不能写布尔
+          plugin.settings.timestamp.englishOutput =
+            v === 'on' ? true : v === 'off' ? false : null;
+          await plugin.saveSettings();
+        } catch (e) {
+          console.error('[Time Tools] 保存转换结果语言失败', e);
+        }
+        // 不重绘设置页：重绘会让下拉失焦（踩坑表老问题）
+        refreshPluginViews(plugin);
+      });
+    });
+
+  /*
    * 日历语言：只管日历网格里的月份名与星期名，与上面的显示语言相互独立。
    * 有人界面用英文、日历想看中文月份，也有人反过来。
    */
@@ -596,6 +630,10 @@ function daypartText(key, zh) {
   return DAYPART_EN[key] || zh;
 }
 
+function effectiveLang() {
+  try { return (typeof resolve === 'function' ? resolve(getLang()) : getLang()); } catch (e) { return 'zh'; }
+}
+
 module.exports = {
   LANGS,
   t,
@@ -616,6 +654,7 @@ module.exports = {
   daypartText,
   toTW,
   detectSystemLang,
+  effectiveLang,
   matchLang,
   renderLangTab,
 };

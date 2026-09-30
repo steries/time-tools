@@ -221,6 +221,118 @@ console.log('\n[9] 语言标签不能吃掉主设置页的标签栏');
   }
 }
 
+
+console.log('\n[10] 转换结果语言开关（§4：必须放在界面语言区）');
+{
+  /*
+   * 用户反馈「这个开关找不到」—— 它必须和 uiLang 同一区、紧跟其后。
+   * 位置断言：放进时间戳区就会红。
+   * 三态用 null / true / false 区分「没设过」和「设成关」，
+   * 所以拨回 auto 要写回 null，不能写布尔。
+   * 这里同步调用 change：赋值发生在 await saveSettings 之前，不 await 也能验到。
+   */
+  setLang('zh');
+  global.__settings = [];
+  const outer = new obsidian.MockEl('div');
+  const pane = outer.createDiv({ cls: 'tt-lang-pane' });
+  const plugin = {
+    settings: { uiLang: 'auto', timestamp: { englishOutput: null }, calendar: { lang: 'auto' } },
+    saveSettings: async () => { plugin.__saved = true; },
+  };
+  renderLangTab(pane, plugin);
+
+  const all = global.__settings || [];
+  const iName = all.findIndex((s) => s.name === '显示语言');
+  const iOut = all.findIndex((x) => x.name === '转换结果语言');
+  const iCal = all.findIndex((x) => x.name === '日历语言');
+  check('界面语言区有「转换结果语言」项', iOut >= 0, all.map((x) => x.name).join(' | '));
+  check('紧跟显示语言之后', iName >= 0 && iOut === iName + 1, `name=${iName} out=${iOut}`);
+  check('排在日历语言之前', iCal < 0 || iOut < iCal, `out=${iOut} cal=${iCal}`);
+
+  const sOut = iOut >= 0 ? all[iOut] : null;
+  const dd = sOut ? (sOut.components || [])[0] : null;
+  const keys = dd && dd.options ? Object.keys(dd.options) : [];
+  check('下拉三档 auto/on/off 齐全',
+    keys.indexOf('auto') >= 0 && keys.indexOf('on') >= 0 && keys.indexOf('off') >= 0,
+    keys.join(','));
+  check('没设过时显示 auto', !!dd && dd.value === 'auto', dd && String(dd.value));
+  check('说明写清了不可逆', /不可逆/.test((sOut && sOut.desc) || ''),
+    ((sOut && sOut.desc) || '').slice(0, 30));
+
+  if (dd && dd.change) {
+    dd.change('on');
+    check('拨到 on 写 true', plugin.settings.timestamp.englishOutput === true,
+      String(plugin.settings.timestamp.englishOutput));
+    dd.change('off');
+    check('拨到 off 写 false', plugin.settings.timestamp.englishOutput === false,
+      String(plugin.settings.timestamp.englishOutput));
+    dd.change('auto');
+    check('拨回 auto 写 null（不是布尔）', plugin.settings.timestamp.englishOutput === null,
+      String(plugin.settings.timestamp.englishOutput));
+  }
+  check('改动有落盘', plugin.__saved === true);
+
+  // 英文态：名称与三档都要是英文，不能有中文残留
+  setLang('en');
+  global.__settings = [];
+  const o2 = new obsidian.MockEl('div');
+  renderLangTab(o2.createDiv(), plugin);
+  const en = (global.__settings || []).find((x) => /Conversion result/i.test(x.name));
+  check('英文态有对应项', !!en, (global.__settings || []).map((x) => x.name).join(' | '));
+  if (en) {
+    const d2 = (en.components || [])[0];
+    const v2 = d2 && d2.options ? Object.values(d2.options).join(' / ') : '';
+    check('英文态三档无中文', !/[一-鿿]/.test(v2), v2);
+    check('英文态说明无中文', !/[一-鿿]/.test(en.desc || ''), (en.desc || '').slice(0, 40));
+  }
+  setLang('zh');
+}
+
+console.log('\n[10.1] 英文输出实际生效：星期项（§2 截图实证）');
+{
+  /*
+   * 用户截图：界面英文 + 开关已开，相对时间变成了 in 3 days，
+   * 但「添加星期」仍是「周二」—— 因为 weekday 支走的是硬编码中文数组。
+   * 修法**不能**直接复用 WEEKDAY_NAMES：那张表的中文是单字（日历表头宽度需要），
+   * 复用会把中文界面的「周二」变成「二」—— 所以另建输出专用表 WEEKDAY_OUT。
+   */
+  const settings = require(path + 'src/settings.js');
+  const timestamp = require(path + 'src/timestamp.js');
+  const mk = (out) => {
+    const base = settings.migrateSettings(null);
+    base.timestamp.format = 'YYYY-MM-DD';
+    base.timestamp.englishOutput = out;
+    return { settings: base, app: { workspace: { getLeavesOfType: () => [] } } };
+  };
+  const run = (p, key, raw) => timestamp.compute(p, key, raw, {});
+
+  setLang('zh');
+  check('中文界面 + 未设过 → 周二（两字，防回归）',
+    run(mk(null), 'weekday', '2026-09-29') === '2026-09-29 周二',
+    run(mk(null), 'weekday', '2026-09-29'));
+  check('中文界面 + 强制关 → 周二',
+    run(mk(false), 'weekday', '2026-09-29') === '2026-09-29 周二',
+    run(mk(false), 'weekday', '2026-09-29'));
+  check('中文界面 + 强制开 → Tue',
+    run(mk(true), 'weekday', '2026-09-29') === '2026-09-29 Tue',
+    run(mk(true), 'weekday', '2026-09-29'));
+
+  setLang('en');
+  const enOut = run(mk(null), 'weekday', '2026-09-29');
+  check('英文界面 + 跟随 → Tue（§2 原始现象已修）', enOut === '2026-09-29 Tue', enOut);
+  check('英文星期不含中文', !/[一-鿿]/.test(enOut || ''), enOut);
+
+  // 往返：输出的英文星期必须能被「去掉星期」剥掉，否则二次转换会叠两层
+  check('英文星期输出后能剥掉（往返）',
+    run(mk(true), 'stripWeekday', '2026-09-29 Tue') === '2026-09-29',
+    run(mk(true), 'stripWeekday', '2026-09-29 Tue'));
+
+  // 明令不做：农历 / 节气 / 干支在英文开关下仍为中文
+  const lunar = run(mk(true), 'lunar', '2026-09-29');
+  check('农历在英文开关下仍为中文', /[一-鿿]/.test(lunar || ''), lunar);
+  setLang('zh');
+}
+
 console.log('\n———————————————');
 console.log('界面语言：' + pass + ' 项，失败 ' + fail + (fail ? ' ❌' : ' ✅'));
 process.exit(fail ? 1 : 0);

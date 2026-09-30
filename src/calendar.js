@@ -84,14 +84,14 @@ function targetDow(settings) {
  */
 function applyCalendarWeekSpec(settings) {
   const cal = settings && settings.calendar;
-  if (!cal || cal.calendarFixEnabled === false) return '已关闭（未做任何写入）';
+  if (!cal || cal.calendarFixEnabled === false) return i18nT('kda76fdd8', '已关闭（未做任何写入）');
 
-  if (typeof window === 'undefined') return '无 window';
+  if (typeof window === 'undefined') return i18nT('kec4153db', '无 window');
 
   // 边界 1：已存在就完全不动，Calendar 自己的配置优先
   if (window._bundledLocaleWeekSpec) {
     const cur = window._bundledLocaleWeekSpec.dow;
-    return `已存在，未改动（dow=${typeof cur === 'undefined' ? '无' : cur}）`;
+    return i18nT('k9ec53dc6', '已存在，未改动（dow={0}）', typeof cur === 'undefined' ? i18nT('kd81bb206', '无') : cur);
   }
 
   // 边界 2：只写这一个变量，绝不动 moment 的全局 locale
@@ -101,16 +101,16 @@ function applyCalendarWeekSpec(settings) {
    * 而 Calendar 会拿这个 spec 去 defineLocale，周数和模板日期都会算偏。
    */
   window._bundledLocaleWeekSpec = { dow, doy: weekDoyOf(dow) };
-  return `已补上（dow=${dow}, doy=${weekDoyOf(dow)}）`;
+  return i18nT('k2b9d893b', '已补上（dow={0}, doy={1}）', dow, weekDoyOf(dow));
 }
 
 /** 设置页状态显示用：当前周起始（只读） */
 function weekSpecStatus() {
-  if (typeof window === 'undefined') return '无 window';
+  if (typeof window === 'undefined') return i18nT('kec4153db', '无 window');
   const spec = window._bundledLocaleWeekSpec;
-  if (!spec) return '未初始化（Calendar 设置页会报 dow）';
+  if (!spec) return i18nT('k880d5845', '未初始化（Calendar 设置页会报 dow）');
   const dow = spec.dow;
-  return typeof dow === 'undefined' ? '已初始化但无 dow' : `dow=${dow}`;
+  return typeof dow === 'undefined' ? i18nT('kdd9b32c2', '已初始化但无 dow') : `dow=${dow}`;
 }
 
 /* ------------------------------------------------------------------ *
@@ -304,12 +304,12 @@ function enforceExclusive(plugin, keep) {
   if (!cal || cal.allowBoth === true) return null;
   if (keep === 'own' && cal.enhanceCalendarEnabled === true) {
     cal.enhanceCalendarEnabled = false;
-    return '已自动关闭「在 Calendar 视图上接管点击」';
+    return i18nT('k9304b7fc', '已自动关闭「在 Calendar 视图上接管点击」');
   }
   if (keep === 'enhance' && cal.ownCalendarEnabled === true) {
     cal.ownCalendarEnabled = false;
     closeOwnCalendar(plugin);
-    return '已自动关闭并收起 time tools 日历';
+    return i18nT('k4e3fb620', '已自动关闭并收起 time tools 日历');
   }
   return null;
 }
@@ -336,7 +336,7 @@ function normalizeEnhanceExclusive(plugin) {
   const cal = plugin.settings && plugin.settings.calendar;
   if (!cal || cal.nativeDayWeek !== true || cal.enhanceCalendarEnabled !== true) return null;
   cal.nativeDayWeek = false;
-  return '两个增强开关此前同时开启，已保留「全接管」、关闭「日/周用 Calendar 原生」';
+  return i18nT('k2bdb5b32', '两个增强开关此前同时开启，已保留「全接管」、关闭「日/周用 Calendar 原生」');
 }
 
 function normalizeCalendarExclusive(plugin) {
@@ -348,10 +348,10 @@ function normalizeCalendarExclusive(plugin) {
   let note;
   if (isCalendarOpen(plugin)) {
     cal.enhanceCalendarEnabled = false;
-    note = '两个日历此前同时开启，已保留 time tools 日历、关闭 Calendar 增强';
+    note = i18nT('kf2f3eebc', '两个日历此前同时开启，已保留 time tools 日历、关闭 Calendar 增强');
   } else {
     cal.ownCalendarEnabled = false;
-    note = '两个日历此前同时开启，已保留 Calendar 增强、关闭 time tools 日历';
+    note = i18nT('k3ec02112', '两个日历此前同时开启，已保留 Calendar 增强、关闭 time tools 日历');
   }
   // 无论保留哪个，总开关一旦为 false 就把视图收起（含布局恢复出来的）
   if (cal.ownCalendarEnabled !== true) closeOwnCalendar(plugin);
@@ -430,7 +430,7 @@ function setEnhanceMode(plugin, mode) {
   cal.nativeDayWeek = mode === 'dayweek';
   cal.enhanceCalendarEnabled = mode === 'full';
 
-  let note = wasOther ? '两个增强开关只能开一个：已自动关闭另一个' : null;
+  let note = wasOther ? i18nT('k580b8291', '两个增强开关只能开一个：已自动关闭另一个') : null;
   // 任一增强模式开启时，与 time tools 日历仍按 allowBoth 互斥
   if (mode !== 'none') {
     const n2 = enforceExclusive(plugin, 'enhance');
@@ -492,7 +492,7 @@ function renderBugFoldSection(containerEl, plugin) {
       b.setButtonText(i18nT('k5b0520a9', '应用')).setCta().onClick(async () => {
         const r = applyCalendarWeekSpec(plugin.settings);
         status.setText(i18nT('kbc7fdc3c', '当前：{0}（本次：{1}）', weekSpecStatus(), r));
-        new obsidian.Notice('日历修复：' + r);
+        new obsidian.Notice(i18nT('k68381504', '日历修复：{0}', r));
       })
     );
 
@@ -565,14 +565,14 @@ function registerTemplaterBridge(plugin) {
         bridgeNewNote(plugin, file).catch((e) => {
           console.warn('[Time Tools] Templater 桥接失败', e);
           notifyOnce(
-            'Templater 补跑失败：' + (e && e.message ? e.message : e) + '（详见控制台）'
+            i18nT('k6b3a247e', 'Templater 补跑失败：{0}（详见控制台）', (e && e.message ? e.message : e))
           );
         });
       })
     );
   } catch (e) {
     console.warn('[Time Tools] Templater 桥接注册失败', e);
-    notifyOnce('Templater 补跑监听注册失败，本次启动不会自动补跑模板');
+    notifyOnce(i18nT('k86dfe5a3', 'Templater 补跑监听注册失败，本次启动不会自动补跑模板'));
   }
 }
 
@@ -684,7 +684,7 @@ async function bridgeNewNote(plugin, file) {
   const t = noteMod.getTemplater(plugin.app);
   if (!t) {
     console.warn('[Time Tools] Templater 不可用，无法补跑模板：', file.path);
-    notifyOnce('Templater 不可用，无法补跑模板 —— 请安装并启用 Templater 后重试');
+    notifyOnce(i18nT('k3b0d4cef', 'Templater 不可用，无法补跑模板 —— 请安装并启用 Templater 后重试'));
     return bail('Templater 未安装或未初始化');
   }
 
@@ -712,7 +712,7 @@ async function bridgeNewNote(plugin, file) {
       const after = await plugin.app.vault.cachedRead(file);
       if (String(after).indexOf('<%') < 0) {
         bridgedPaths.set(file.path, now);
-        new obsidian.Notice('已用 Templater 重新渲染：' + (file.basename || file.path));
+        new obsidian.Notice(i18nT('k1aeabe62', '已用 Templater 重新渲染：{0}', (file.basename || file.path)));
         return ok();
       }
     }
@@ -743,7 +743,7 @@ async function bridgeNewNote(plugin, file) {
   } catch (e) {
     console.warn('[Time Tools] Templater 渲染失败，未写入任何内容：', file.path, e);
     notify(
-      'Templater 渲染失败，笔记未写入任何内容：' + (file.basename || file.path)
+      i18nT('ke0341413', 'Templater 渲染失败，笔记未写入任何内容：{0}', (file.basename || file.path))
     );
     return bail('Templater 渲染抛错：' + (e && e.message ? e.message : String(e)));
   }
@@ -752,7 +752,7 @@ async function bridgeNewNote(plugin, file) {
   bridgedPaths.set(file.path, now);
   // 必须覆盖写，不能用 append：追加会让模板内容在笔记里出现两份
   await plugin.app.vault.modify(file, String(rendered));
-  new obsidian.Notice('已用 Templater 重新渲染：' + (file.basename || file.path));
+  new obsidian.Notice(i18nT('k1aeabe62', '已用 Templater 重新渲染：{0}', (file.basename || file.path)));
   return ok();
 }
 
@@ -777,7 +777,7 @@ async function openOwnCalendar(plugin) {
    */
   const cal = plugin.settings && plugin.settings.calendar;
   if (!cal || cal.ownCalendarEnabled !== true) {
-    new obsidian.Notice('time tools 日历未启用，请先在设置里打开总开关');
+    new obsidian.Notice(i18nT('k197af6ae', 'time tools 日历未启用，请先在设置里打开总开关'));
     return false;
   }
   /*
@@ -786,7 +786,7 @@ async function openOwnCalendar(plugin) {
    */
   if (cal.allowBoth !== true && cal.enhanceCalendarEnabled === true) {
     new obsidian.Notice(
-      '已启用「在 Calendar 视图上接管点击」，两者默认互斥。如需同时开启，请打开「允许同时开启两个日历」。'
+      i18nT('k5a1eb678', '已启用「在 Calendar 视图上接管点击」，两者默认互斥。如需同时开启，请打开「允许同时开启两个日历」。')
     );
     return false;
   }
@@ -800,7 +800,7 @@ async function openOwnCalendar(plugin) {
     if (leaf) ws.revealLeaf(leaf);
     return true;
   } catch (e) {
-    new obsidian.Notice('打开日历视图失败：' + (e && e.message ? e.message : e));
+    new obsidian.Notice(i18nT('k22cb0efa', '打开日历视图失败：{0}', (e && e.message ? e.message : e)));
     return false;
   }
 }
@@ -1082,7 +1082,7 @@ class CalendarNoteView extends obsidian.ItemView {
        */
       text: MONTH_NAMES[calLang(((this.plugin && this.plugin.settings
         && this.plugin.settings.calendar) || {}).lang)][this.month],
-      title: '点击生成/打开月记',
+      title: i18nT('k6fa1b0d8', '点击生成/打开月记'),
     });
     mBtn.onclick = () => {
       this.picked = new Date(this.year, this.month, 1);
@@ -1241,15 +1241,20 @@ class CalendarNoteView extends obsidian.ItemView {
         this.drawLunar(cell, d, !!file);
       } else if (file) {
         cell.addClass('has-note');
+        let dotCount = 0;
         // 圆点开关关闭时不做任何字数读取，省掉一整轮异步 IO
         if (this.plugin.settings.calendar.dotsEnabled !== false) {
           const cnt = notes.cachedWordCount(file);
           if (cnt > 0) cell.addClass('has-words');
           // 实心 = 已写满的整点，空心 = 正在写的那一点
-          this.drawDots(cell, this.dotPattern(cnt, true));
+          dotCount = this.drawDots(cell, this.dotPattern(cnt, true));
           // 未缓存的异步补读，读到后重绘（首帧先占位）
           if (!notes.hasWordCount(file) && !this.pendingRead) this.readWordsAsync();
         }
+        /* 兜底圆点：原先用 CSS :has() 判定，但移动端（Capacitor，非 Electron）
+         * 支持不一致 —— 桌面正常、Android 可能一颗不出现且**不报错**，极难发现。
+         * 改由 class 判定，视觉完全一致。只在此处加，重绘时格子重建会自动重算。 */
+        if (dotCount === 0) cell.addClass('tt-cal-need-dot');
       }
       cell.onclick = () => {
         this.picked = d;
@@ -1331,6 +1336,7 @@ class CalendarNoteView extends obsidian.ItemView {
     for (let k = 0; k < pattern.hollow; k++) {
       wrap.createDiv({ cls: 'tt-cal-dot is-hollow' });
     }
+    return (pattern.solid || 0) + (pattern.hollow || 0);
   }
 
   /**
@@ -1973,9 +1979,7 @@ function attachCalendarEnhance(plugin) {
     if (!enhanceWarned && box.querySelectorAll('.day').length === 0) {
       enhanceWarned = true;
       new obsidian.Notice(
-        'Time Tools：未能识别 Calendar 的日期格（.day），' +
-        '可能是 Calendar 改版。请关闭「在 Calendar 视图上接管点击」，' +
-        '或改用 time tools 日历。'
+        i18nT('kea724970', 'Time Tools：未能识别 Calendar 的日期格（.day），可能是 Calendar 改版。请关闭「在 Calendar 视图上接管点击」，或改用 time tools 日历。')
       );
       console.warn('[Time Tools] Calendar 增强选择器失效：容器内未找到 .day');
     }
@@ -1989,8 +1993,7 @@ function attachCalendarEnhance(plugin) {
       if (!enhanceWeekWarned && box.querySelectorAll(WEEK_NUM_SELECTOR).length === 0) {
         enhanceWeekWarned = true;
         new obsidian.Notice(
-          'Time Tools：未能识别 Calendar 的周列，周数点击可能失效。' +
-          '若你只用日期格可忽略；需要周数跳转请改用 time tools 日历。'
+          i18nT('k3c8de018', 'Time Tools：未能识别 Calendar 的周列，周数点击可能失效。若你只用日期格可忽略；需要周数跳转请改用 time tools 日历。')
         );
         console.warn('[Time Tools] Calendar 增强周列选择器失效：容器内未找到 ' + WEEK_NUM_SELECTOR);
       }
@@ -2305,12 +2308,12 @@ function runNoteRenameFlow(plugin) {
   try {
     list = scanNoteRenames(app, plugin.settings);
   } catch (e) {
-    new obsidian.Notice('扫描失败：' + ((e && e.message) || e));
+    new obsidian.Notice(i18nT('kee601eab', '扫描失败：{0}', ((e && e.message) || e)));
     return;
   }
   if (!list.length) {
     new obsidian.Notice(
-      '没有需要改名的笔记（都已与当前格式一致，或四类笔记的存放位置为空）'
+      i18nT('k8f0cab45', '没有需要改名的笔记（都已与当前格式一致，或四类笔记的存放位置为空）')
     );
     return;
   }
@@ -2320,8 +2323,7 @@ function runNoteRenameFlow(plugin) {
   const box = modal.contentEl;
   box.createDiv({
     cls: 'tt-tip',
-    text: i18nT('kcf7c9e2b', '以下笔记将改成当前「日期格式」。改名由 Obsidian 执行，站内链接会自动更新；')
-      + '目标已存在的会跳过（不覆盖）。',
+    text: i18nT('kc3883589', '以下笔记将改成当前「日期格式」。改名由 Obsidian 执行，站内链接会自动更新；目标已存在的会跳过（不覆盖）。'),
   });
 
   const ul = box.createEl('ul', { cls: 'tt-rename-list' });
@@ -2329,7 +2331,7 @@ function runNoteRenameFlow(plugin) {
     ul.createEl('li', { text: it.from + '  →  ' + it.to });
   });
   if (list.length > RENAME_PREVIEW_MAX) {
-    ul.createEl('li', { text: i18nT('ka9b35478', '……另有 ') + (list.length - RENAME_PREVIEW_MAX) + ' 个' });
+    ul.createEl('li', { text: i18nT('k27347d0a', '……另有 {0} 个', list.length - RENAME_PREVIEW_MAX) });
   }
 
   const row = box.createDiv({ cls: 'tt-rename-actions' });
@@ -2339,8 +2341,7 @@ function runNoteRenameFlow(plugin) {
     modal.close();
     const r = await applyNoteRenames(app, list);
     new obsidian.Notice(
-      '改名完成：成功 ' + r.ok.length + '，跳过 ' + r.skipped.length
-        + '，失败 ' + r.failed.length
+      i18nT('k49ec9b3a', '改名完成：成功 {0}，跳过 {1}，失败 {2}', r.ok.length, r.skipped.length, r.failed.length)
     );
   });
   modal.open();

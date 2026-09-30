@@ -50,8 +50,9 @@ check('反证：旧的自动打开全接管已删除',
   && !/已自动打开「在 Calendar 视图上接管点击」/.test(CAL));
 check('启动期归一化两个增强开关',
   /function normalizeEnhanceExclusive\(plugin\)/.test(CAL));
+// 文案已包 i18nT，正则跟着放宽（否则改国际化就会误报）
 check('归一化保留了全接管、关掉半接管',
-  /cal\.nativeDayWeek = false;\s*\n\s*return '两个增强开关此前同时开启/.test(CAL));
+  /cal\.nativeDayWeek = false;\s*\n\s*return i18nT\('k2bdb5b32', '两个增强开关此前同时开启/.test(CAL));
 
 console.log('运行时门控');
 check('门控放行任一增强模式',

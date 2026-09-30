@@ -298,7 +298,7 @@ class Recorder {
 
     const existing = await vault.read(file);
     await vault.modify(file, insertAtTop(existing, this.buildContent(data)));
-    new obsidian.Notice(`已写入 ${path}`);
+    new obsidian.Notice(i18nT('k1906acec', '已写入 {0}', path));
     return path;
   }
 
@@ -412,7 +412,7 @@ class Recorder {
     const text = this.buildContent(data);
     const ok = await copyToClipboard(text);
     new obsidian.Notice(
-      ok ? '🍅 结果已复制，Ctrl+V 即可插入' : '复制失败，请检查剪贴板权限',
+      ok ? i18nT('k332e615a', '🍅 结果已复制，Ctrl+V 即可插入') : i18nT('k4d7c45ad', '复制失败，请检查剪贴板权限'),
       5000
     );
     return ok;
@@ -438,16 +438,16 @@ class Recorder {
 
       const r = await this.runQuickAdd(data);
       if (r.ok) {
-        new obsidian.Notice(`已执行 QuickAdd：${this.settings.quickAddChoice}`);
+        new obsidian.Notice(i18nT('kba5a9f60', '已执行 QuickAdd：{0}', this.settings.quickAddChoice));
         return null;
       }
 
       // 联动失败：按开关决定是回退内置写入，还是直接放弃
       if (!this.settings.fallbackToBuiltin) {
-        new obsidian.Notice(`QuickAdd ${r.message}；未记录（回退已关闭）`, 8000);
+        new obsidian.Notice(i18nT('k5dd85e03', 'QuickAdd {0}；未记录（回退已关闭）', r.message), 8000);
         return null;
       }
-      new obsidian.Notice(`QuickAdd ${r.message}；已改用内置写入`, 8000);
+      new obsidian.Notice(i18nT('ke9c6af0f', 'QuickAdd {0}；已改用内置写入', r.message), 8000);
     }
 
     return this.writeToNote(noteName || this.settings.defaultNoteName, data);
@@ -460,16 +460,16 @@ class Recorder {
  */
 function confirmDisableRecord(plugin, s) {
   const lines = [
-    '· 番茄结束不再自动记录',
-    '· 结束弹窗不再显示「记录」按钮',
-    '· 下方的记录设置会折叠收起',
+    i18nT('kfdb7d349', '· 番茄结束不再自动记录'),
+    i18nT('kbefe0380', '· 结束弹窗不再显示「记录」按钮'),
+    i18nT('k2d8ea554', '· 下方的记录设置会折叠收起'),
     '',
-    '已经写进笔记的记录不受影响；各项设置的值也会保留，重新打开总开关即可恢复。',
+    i18nT('k90ad143e', '已经写进笔记的记录不受影响；各项设置的值也会保留，重新打开总开关即可恢复。'),
   ];
   return confirmDialog(plugin, {
-    title: '确定关闭会话记录？',
-    content: '关闭后将：\n\n' + lines.join('\n'),
-    okText: '仍然关闭',
+    title: i18nT('k6ee49b67', '确定关闭会话记录？'),
+    content: i18nT('k4699ce36', '关闭后将：\n\n') + lines.join('\n'),
+    okText: i18nT('k44962493', '仍然关闭'),
     warning: true,
   });
 }
@@ -599,7 +599,7 @@ function renderRecordSettings(containerEl, plugin) {
 
     new obsidian.Setting(body)
       .setName(i18nT('k9d6b52a2', '写入模板'))
-      .setDesc(i18nT('ked22713c', "占位符：{{date}} {{time}} {{range}} {{cycles}} {{focus}} {{rest}} {{focusText}} {{restText}} {{pauses}} {{longBreaks}} {{profile}} {{skippedLine}}。{{focus}}/{{rest}} 是整数分钟，不随精度开关变化；{{focusText}}/{{restText}} 自带单位，精度跟随上面的「记录到秒」开关。想让开关生效，模板里要用 {{focusText}}（默认模板已是）；若你自定义过模板且写的是「{{focus}} 分钟」，改成 {{focusText}} 即可 —— 注意去掉后面的「分钟」二字，否则会渲染成「25 分 30 秒 分钟」。"))
+      .setDesc(i18nT('ked22713c', "占位符：{{date}} {{time}} {{range}} {{cycles}} {{focus}} {{rest}} {{focusText}} {{restText}} {{pauses}} {{longBreaks}} {{profile}} {{skippedLine}}。{{focus}}/{{rest}} 是整数分钟，不随精度开关变化；{{focusText}}/{{restText}} 自带单位，精度跟随上面的「记录到秒」开关。想让开关生效，模板里要用 {{focusText}}（默认模板已是）；若你自定义过模板且写的是「{{focus}} 分钟」，改成 {{focusText}} 即可 —— 注意去掉后面的「分钟」二字，否则会渲染成「25 分 30 秒 分钟」。默认模板为中文，如需英文请自行改写；写入笔记的内容不会被翻译。"))
       .addTextArea((t) =>
         t.setValue(s.template).onChange(async (v) => {
           s.template = v;
@@ -728,7 +728,7 @@ function renderRecordSettings(containerEl, plugin) {
       .addButton((b) =>
         b.setButtonText(i18nT('k72a75f35', '复制 {{VALUE}}')).onClick(async () => {
           const ok = await copyToClipboard('{{VALUE}}');
-          new obsidian.Notice(ok ? '已复制 {{VALUE}}' : '复制失败');
+          new obsidian.Notice(ok ? i18nT('k999073d1', '已复制 {{VALUE}}') : i18nT('k5154ae17', '复制失败'));
         })
       );
 
@@ -739,7 +739,7 @@ function renderRecordSettings(containerEl, plugin) {
       .addButton((b) =>
         b.setButtonText(i18nT('k1a6aa24e', '执行')).onClick(async () => {
           const r = await plugin.recorder.testQuickAdd();
-          new obsidian.Notice(r.ok ? '✅ QuickAdd 执行成功' : `❌ ${r.message}`, 10000);
+          new obsidian.Notice(r.ok ? i18nT('k23822f6a', '✅ QuickAdd 执行成功') : i18nT('k5ea68de1', '❌ {0}', r.message), 10000);
         })
       );
   };
@@ -919,14 +919,14 @@ async function showStats(plugin) {
   const p = plugin && plugin.settings && plugin.settings.pomodoro;
   const src = (p && p.statsSource) || 'off';
   if (src === 'off') {
-    new obsidian.Notice('累计统计当前关闭。设置 → 番茄钟 →「累计统计数据源」可切换为「解析笔记」或「本机累计」。');
+    new obsidian.Notice(i18nT('kd80b67d3', '累计统计当前关闭。设置 → 番茄钟 →「累计统计数据源」可切换为「解析笔记」或「本机累计」。'));
     return { ok: false, reason: 'off' };
   }
   if (src === 'memory') {
     const sm = (p && p.statsMemory) || {};
     const today = obsidian.moment().format('YYYY-MM-DD');
     const t = sm.todayDate === today ? Number(sm.todayFocusMs) : 0;
-    new obsidian.Notice(`📊 今日专注 ${fmtDur(t)}　｜　累计 ${fmtDur(Number(sm.totalFocusMs))}　｜　 ${Number(sm.sessions) || 0} 次会话`);
+    new obsidian.Notice(i18nT('kec519522', '📊 今日专注 {0}　｜　累计 {1}　｜　 {2} 次会话', fmtDur(t), fmtDur(Number(sm.totalFocusMs)), Number(sm.sessions) || 0));
     return { ok: true, source: 'memory' };
   }
   if (src === 'custom') {
@@ -939,15 +939,15 @@ async function showStats(plugin) {
     const path = rec.notePath || '';
     const file = vault && path ? vault.getAbstractFileByPath(path) : null;
     if (!file) {
-      new obsidian.Notice('没找到会话记录笔记（数据源＝解析笔记）。请确认记录笔记路径设置正确。');
+      new obsidian.Notice(i18nT('k1c2772ff', '没找到会话记录笔记（数据源＝解析笔记）。请确认记录笔记路径设置正确。'));
       return { ok: false, reason: 'no-note' };
     }
     const text = await vault.cachedRead(file);
     const total = sumMinutes(text);
-    new obsidian.Notice(`📊 从记录笔记读到约 ${fmtDur(total * 60000)}（按笔记中「N 分钟」累加，格式改过会读不准）`);
+    new obsidian.Notice(i18nT('k2bf6a4c6', '📊 从记录笔记读到约 {0}（按笔记中「N 分钟」累加，格式改过会读不准）', fmtDur(total * 60000)));
     return { ok: true, source: 'note', minutes: total };
   } catch (e) {
-    new obsidian.Notice('读取会话记录笔记失败，统计未生成。');
+    new obsidian.Notice(i18nT('ka91ddb73', '读取会话记录笔记失败，统计未生成。'));
     return { ok: false, reason: 'read-failed' };
   }
 }
@@ -963,7 +963,7 @@ async function readCustomStats(plugin) {
   const p = plugin && plugin.settings && plugin.settings.pomodoro;
   const path = normalizePath((p && p.statsCustomPath) || '');
   if (!path) {
-    new obsidian.Notice('数据源＝自定义位置，但没填路径。设置 → 番茄钟 →「自定义统计位置」。');
+    new obsidian.Notice(i18nT('kf6764e61', '数据源＝自定义位置，但没填路径。设置 → 番茄钟 →「自定义统计位置」。'));
     return { ok: false, reason: 'empty-path' };
   }
   const vault = plugin.app && plugin.app.vault;
@@ -979,17 +979,17 @@ async function readCustomStats(plugin) {
       files = vault.getFiles().filter((f) => f.path.startsWith(prefix) && f.extension === 'md');
     }
     if (!files.length) {
-      new obsidian.Notice(`自定义位置没读到任何笔记：${path}`);
+      new obsidian.Notice(i18nT('k1e7bf534', '自定义位置没读到任何笔记：{0}', path));
       return { ok: false, reason: 'no-file' };
     }
     let total = 0;
     for (let i = 0; i < files.length; i++) {
       total += sumMinutes(await vault.cachedRead(files[i]));
     }
-    new obsidian.Notice(`📊 自定义位置（${files.length} 篇）读到约 ${fmtDur(total * 60000)}`);
+    new obsidian.Notice(i18nT('kf3a2c081', '📊 自定义位置（{0} 篇）读到约 {1}', files.length, fmtDur(total * 60000)));
     return { ok: true, source: 'custom', minutes: total, files: files.length };
   } catch (e) {
-    new obsidian.Notice('读取自定义位置失败，统计未生成。');
+    new obsidian.Notice(i18nT('k4b94496a', '读取自定义位置失败，统计未生成。'));
     return { ok: false, reason: 'read-failed' };
   }
 }

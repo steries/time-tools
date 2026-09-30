@@ -1,32 +1,31 @@
 /*
  * 中文冒号时刻守卫（v3.30）
  * ------------------------------------------------------------------
- * 守的 bug：时钟正则只写英文半角冒号 `:`（U+003A），而中文输入法打出的是
- *           全角 `：`（U+FF1A）。同一文件 1559 行本来就是 `[:：]`，
- *           证明是逐处手写正则时漏掉，不是有意设计。
+ * 目的：把「中文输入法下打出 12：45 完全没反应」从「用户发现」变成「测试会红」。
  *
- * 为什么必须写成断言（而不是"改完看一眼"）：
- *   ① 不只是解析失败 —— collectCandidates 根本挑不出这个片段，
- *      所以光标停在「12：45」上时**连转换菜单都不弹**，
- *      用户看到的是"没反应"，比算错更难发现。
- *   ② 改之前 50/50 全绿，改之后还是 50/50 全绿 ——
- *      现有测试对中文冒号**完全无感**。不新增断言的话，
- *      将来谁又把正则改回 `:`，测试照样假装没事。
+ * 根因：时钟正则里只写了英文冒号 :(U+003A)，而中文输入法打出来的是
+ *       全角 ：(U+FF1A) —— 两个不同字符，正则不匹配。
+ *       同一文件 1559 行本来就是 [:：]，证明这是逐处手写时漏掉，不是设计。
  *
- * 反证方法（改动后必须验证）：
- *   把 TIME_ONLY_RE 改回 /^\d{1,2}:\d{2}(?::\d{2})?$/ → A 组必须报红，
- *   而 B 组（英文回归）不受影响。改回 `[:：]` 后恢复全绿。
+ * 最容易被忽略的一点：它不只是「解析失败」—— collectCandidates 根本
+ * 挑不出这个片段，所以光标停在 12：45 上时连转换菜单都不弹。
+ * 用户感知是"完全没反应"，比算错更难发现。
+ *
+ * 本套件同时守「输入宽容、输出从严」：
+ *   输入  中文冒号、英文冒号都收
+ *   输出  一律英文冒号（现在的正确是格式串恰好都是英文带来的，
+ *         没有断言保护它 —— 将来谁把 HH:mm 改成 HH：mm 就会静默退化）
  */
 
 'use strict';
 
-process.env.TZ = 'UTC';
-
-const fs = require('fs');
 const path = require('path');
 const SRC = path.join(__dirname, '..', 'src');
-const TS = path.join(SRC, 'timestamp.js');
-const ta = require(TS);
+const ts = require(path.join(SRC, 'timestamp.js'));
+
+const PLUGIN = {
+  settings: { timestamp: { format: 'YYYY-MM-DD HH:mm:ss', extensions: {} } },
+};
 
 let pass = 0;
 let fail = 0;
@@ -35,54 +34,53 @@ function check(name, cond, actual) {
   else { fail++; console.log('  ✗ ' + name + (actual === undefined ? '' : ' → ' + actual)); }
 }
 
-/** 把解析结果格式化成 HH:mm:ss，null 显示为字符串 'null' */
-function hhmmss(text) {
-  const d = ta.parseToDate(text);
-  return d ? ta.fmt(null, d, 'HH:mm:ss') : 'null';
+/** 解析成功且时分符合预期 */
+function parsed(text, h, mi) {
+  const d = ts.parseToDate(text);
+  if (!d || isNaN(d.getTime())) return false;
+  return d.getHours() === h && d.getMinutes() === mi;
+}
+function show(text) {
+  const d = ts.parseToDate(text);
+  return d && !isNaN(d.getTime()) ? d.getHours() + ':' + d.getMinutes() : 'null';
 }
 
-console.log('\n[A] 中文冒号时刻能识别');
-check('12：45 能解析', ta.parseToDate('12：45') !== null);
-check('12：45：30 能解析', ta.parseToDate('12：45：30') !== null);
-check('2026-09-19 12：45 能解析', ta.parseToDate('2026-09-19 12：45') !== null);
-check('2026年9月19日 12：45 能解析', ta.parseToDate('2026年9月19日 12：45') !== null);
-check('9月19日 12：45 能解析', ta.parseToDate('9月19日 12：45') !== null);
+console.log('中文冒号时刻（cncolon）');
 
-console.log('\n[B] 英文冒号回归（改中文不得改坏英文）');
-check('12:45 仍可解析', ta.parseToDate('12:45') !== null);
-check('12:45:30 仍可解析', ta.parseToDate('12:45:30') !== null);
-check('2026-09-19 12:45 仍可解析', ta.parseToDate('2026-09-19 12:45') !== null);
+// ── A 组 · 中文冒号能识别（4 项）────────────────────────────────
+check("parseToDate('12：45') 返回 12:45", parsed('12：45', 12, 45), show('12：45'));
+check("parseToDate('12：45：30') 返回 12:45", parsed('12：45：30', 12, 45), show('12：45：30'));
+check("parseToDate('2026-09-19 12：45') 日期+中文冒号时刻", parsed('2026-09-19 12：45', 12, 45), show('2026-09-19 12：45'));
+check("parseToDate('9月19日 12：45') 中文月日+中文冒号时刻", parsed('9月19日 12：45', 12, 45), show('9月19日 12：45'));
 
-console.log('\n[C] collectCandidates 能挑出片段');
-const cnPick = ta.collectCandidates('会议 12：45 开始');
-check('中文冒号片段被挑出', cnPick.some((x) => x.raw === '12：45'),
-  JSON.stringify(cnPick));
-const enPick = ta.collectCandidates('会议 12:45 开始');
-check('英文冒号片段被挑出', enPick.some((x) => x.raw === '12:45'),
-  JSON.stringify(enPick));
-check('中英文挑出的位置一致', cnPick.length === 1 && enPick.length === 1
-  && cnPick[0].index === enPick[0].index);
+// ── B 组 · 英文冒号回归，不许被改坏（4 项）──────────────────────
+check("parseToDate('12:45') 仍正常", parsed('12:45', 12, 45), show('12:45'));
+check("parseToDate('12:45:30') 仍正常", parsed('12:45:30', 12, 45), show('12:45:30'));
+check("parseToDate('2026-09-19 12:45') 仍正常", parsed('2026-09-19 12:45', 12, 45), show('2026-09-19 12:45'));
+check("parseToDate('2026年9月19日 12:45') 仍正常", parsed('2026年9月19日 12:45', 12, 45), show('2026年9月19日 12:45'));
 
-console.log('\n[D] 输出一律英文冒号（输入宽容、输出从严）');
-/*
- * 现在的正确只是"格式串恰好都是英文"带来的，没有任何断言保护它。
- * 将来谁做中文界面时顺手把 HH:mm 改成 HH：mm，输出就静默变中文 ——
- * 而产出的文本要存进笔记、可能被别的工具再解析，必须规范统一。
- */
-const out1 = hhmmss('12：45');
-check('12：45 输出为英文冒号', !out1.includes('：') && out1.startsWith('12:45'), out1);
-const out2 = hhmmss('12：45：30');
-check('12：45：30 输出为英文冒号', !out2.includes('：'), out2);
-const out3 = ta.fmt(null, ta.parseToDate('2026-09-19 12：45'), 'YYYY-MM-DD HH:mm:ss');
-check('带日期的中文冒号输出也是英文冒号', !out3.includes('：') && out3 === '2026-09-19 12:45:00', out3);
+// ── C 组 · 探测函数（3 项）───────────────────────────────────────
+check("hasClock('12：45') 为 true", ts.hasClock('12：45') === true);
+check("hasClock('12：45：30') 为 true", ts.hasClock('12：45：30') === true);
+check("hasSeconds('12：45：30') 为 true", ts.hasSeconds('12：45：30') === true);
 
-console.log('\n[E] 源码自检（防止漏改 / 改回英文）');
-const tsSrc = fs.readFileSync(TS, 'utf8');
-const cnCount = (tsSrc.match(/\[:：\]/g) || []).length;
-check('src/timestamp.js 里 [:：] 共 17 次出现', cnCount === 17, cnCount);
-check('不存在英文-only 的旧 TIME_ONLY_RE',
-  !/\/^\\d\{1,2\}:\\d\{2\}\(?::\\d\{2\}\)?\$\//.test(tsSrc));
+// ── D 组 · 行内挑选（2 项）───────────────────────────────────────
+const cands = ts.collectCandidates('会议 12：45 开始，另一场 12:15 结束').map((x) => x.raw);
+check("collectCandidates 能挑出 '12：45'", cands.includes('12：45'), JSON.stringify(cands));
+check(
+  '同一句里中英文冒号两条都能挑出',
+  cands.includes('12：45') && cands.includes('12:15'),
+  JSON.stringify(cands)
+);
 
-console.log('\n' + (fail === 0 ? '全部通过 ✅' : fail + ' 项失败 ❌'));
-console.log('套件: cncolon');
-process.exit(fail === 0 ? 0 : 1);
+// ── E 组 · 输出必须是英文冒号（3 项）─────────────────────────────
+function unify(text) {
+  return String(ts.compute(PLUGIN, 'unify', text, {}));
+}
+['12：45', '12：45：30', '2026-09-19 12：45'].forEach((t) => {
+  const out = unify(t);
+  check("输入 '" + t + "' 输出不含中文冒号", !out.includes('：'), out);
+});
+
+console.log('通过 ' + pass + ' / 失败 ' + fail);
+process.exit(fail ? 1 : 0);

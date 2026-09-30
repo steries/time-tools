@@ -106,6 +106,9 @@ Date 对象
 | 改面板 UI | `timestamp.js` | `TimeActionModal` |
 | 加/改命令 | `timestamp.js` | `registerTimeActions` |
 | 加设置项 | `settings.js` | `defaultExtensions` + 渲染函数 |
+
+> 时刻分隔符**同时接受英文 `:` 与中文 `：`**（输入宽容），但**输出一律英文冒号**（输出从严）——
+> 产出的文本要存进笔记、可能被别的工具再解析，必须规范统一。
 | 改番茄钟流程 | `pomodoro.js` | `PomodoroController` |
 | 改番茄钟弹窗 | `pomodoro.js` | `StartModal` 等 |
 | 改会话记录 | `recorder.js` | `Recorder` / `renderRecordSettings` |
@@ -195,6 +198,29 @@ Date 对象
 | `五月十六` | 农历 | 农历 | 农历 |
 | `五月十六号` | 农历 | 农历 | 农历 |
 | `五月十六日` | **阳历** | 农历 | 阳历 |
+
+### 英文时间解析（v3.31 补）
+
+README 早有承诺、代码却**零处 am/pm 处理**，于是 `8am` 连 `looksLikeRelative`
+都过不了——**转换菜单根本不弹**，用户看到的是"完全没反应"（比算错更难发现）。
+
+| 函数 | 作用 |
+|---|---|
+| `parseClockEN` | `8am` / `7:30pm` / `5 pm` / `noon` / `midnight`；12 小时制约定 `12am`=00:00、`12pm`=12:00，`13pm` 判 null |
+| `splitEnglishDayClock` | 「口语日 + 时刻」：`tomorrow 5pm`、`next Monday 10am`。词表**复用 `WORD_REL`**（只把首尾锚定换成前缀匹配），不另抄一份英文词表 |
+| `applyWordYmd` | 按 `WORD_REL` 的 y/m/d 推进基准日；**月份走 `addMonthsClamped`**，否则 01-31 的 `next month` 会变 03-03 |
+
+⚠️ **`convertDaypartAlone` 门控只管「裸时段词」**：那个开关的本意是"单独选中『早上』别给它编 09:00"。
+而 `WORD_REL` 里带 `daypart` 的 8 条（`this morning` / `last night` …）**全都有日期锚点**，
+时段是**限定词**不是模糊词，不受该开关限制。判断依据是"有没有日期锚点"，不是"是不是时段词"。
+
+**「中午」口径**：中午覆盖 11:00~13:00，**11、12 点不动，1~10 点按 PM**（中午1点=13:00）。
+不能简单把「中午」标成 `pm:true` —— 那会让「中午11点」变成 23:00。
+由 `parseClockCN` 的 `noon` 分支实现（各返回点统一走 `apm()`，改口径只改一处）。
+
+**月/年推进必须钳制**：`setMonth` 在月末**静默进位**——01-31 +1月 → 03-03（跨过整个二月），
+03-31 −1月 → 03-03（**日期反而前进**），2024-02-29 +1年 → 2025-03-01。
+统一走 `addMonthsClamped`（先归 1 号再进位，最后钳到该月天数）。
 | `5月16号` | 阳历 | 阳历 | 农历 |
 
 `parseCnSolarDate` 负责中文大写的**阳历**解析——缺它的话
@@ -547,7 +573,7 @@ registerLang('ja', '日本語', { 'k……': '……', … });
 - 内置语言不许被覆盖（`registerLang('en', …)` 返回 `false`）
 - 繁體**保留**：3.3KB，是中文的一支，走 `toTW()` 字表实时转换，不需要第二份完整译文表
 
-**红线守门**：`_test/i18nguard.js`（41 项）。把「零依赖 / EN 表不含中文 /
+**红线守门**：`_test/i18nguard.js`（43 项）。把「零依赖 / EN 表不含中文 /
 设置页文案不许漏包 i18nT / **createDiv·createEl 的 text·title 不许漏包** /
 **`.title =` 这类直接赋值不许漏包** /
 命令名不翻译 / TABS 存 labelKey / 体积：逻辑文件 ≤32KB + 翻译数据合计 ≤10% /
@@ -557,6 +583,18 @@ registerLang('ja', '日本語', { 'k……': '……', … });
 > ① 判定前**先解码 `\uXXXX` 转义** —— 否则把中文写成转义就能完全绕过守卫，
 >    历史上会话小结弹窗整块文案就是这么"守卫全绿、界面全是中文"的；
 > ② 扫描范围从链式 API 扩到 `createDiv/createEl/createSpan` 的 `text:` / `title:`。
+
+扫描清单另含四类**非链式**入口，缺一即漏（v3.32 补全）：`Notice`（运行时弹窗）、
+`_paintSet`（取**第二**实参）、`confirmDialog`（取 `title`/`content`/`okText` 三个参数位）、
+`notifyOnce`（calendar.js 发提示的主要途径）。
+⚠️ 匹配正则的点号必须**可选** —— `notifyOnce()` 是裸调用、没有 `this.`/`obsidian.` 前缀，
+写成 `\.` 前缀的话该项永远匹配不上（v3.32 反证时连续两次假绿才发现）。
+
+> ⚠️ **漏译已四次同族复发，参数位 / 分支值是结构性盲区，不要以为守卫够用了**：
+> `v3.25` 实参是变量（`.setName(def.label)`）→ `v3.32` `_paintSet` 第二实参、`Notice`
+> → `v3.32` `confirmDialog` 参数位 → `v3.32` 三元分支值（`wasOther ? '中文' : null`）。
+> 共同点：中文**不在链式 API 的第一个实参里**，守卫按"链式 + 首参"扫，全部放行。
+> 补漏时顺手 `grep -n "['\"][^'\"]*[一-龥]" src/*.js` 全项目扫一遍，别只改报出来的那一处。
 
 漏包检测用**括号配对取实参**，不用正则字面量 —— 后者只认 `.setName('中文')` 这种最简单的形式，
 三元表达式 / 模板串 / 拼接串全抓不到（v3.22 的 49 处漏包就是这么逃逸的）。
@@ -589,7 +627,7 @@ node _test/arch-doc.js 文档与代码一致性
 node _test/load.js 加载冒烟
 node _test/bughunt.js 边界压力
 node _test/stats.js 累计统计（31 项）
-node _test/i18nguard.js 界面语言红线守门（41 项）
+node _test/i18nguard.js 界面语言红线守门（43 项）
 node _test/i18n.js 界面语言功能（55 项）
 node _test/batchconv.js 批量转换（28 项）
 node _test/configio.js 配置导出 / 导入（29 项）
@@ -600,13 +638,52 @@ node _test/recordformat.js 写入格式契约：写入侧产出能被读取侧�
 node _test/manualdoc.js 人工测试文档各组预期的代码回归（17 项）
 node _test/srchealth.js 源文件本身没被写坏：UTF-8 可解码 / 恰好一个 module.exports（56 项）
 node _test/entryguard.js 所有命令注册点必须过总开关门控（6 项）
+node _test/settingtab.js 设置页 id === 插件 id（7 项）
+node _test/envcontract.js 公共环境契约（10 项）
 ```
 
-全量：`bash _run_tests.sh`（50 个文件 = 49 套件 + 1 公共环境 `_smoke_env.js`；
+全量：`bash _run_tests.sh`（56 个文件 = 55 套件 + 1 公共环境 `_smoke_env.js`；
 跳过 `_` 前缀，任一套件失败退出码 1，可直接当 pre-commit）。
+> **已加 node 前置检查**：node 不在 PATH 时每个套件都是 `command not found`，
+> 输出会伪装成「53 个全 FAIL」而实际一个都没跑 —— 提前 `exit 1` 拦住。
 > 别再用手写 `for t in _test/*.js` —— 漏跑没人知道，v3.28 才补的运行器。
 
 `node build.js` 会在源文件比文档新时提醒更新 ARCHITECTURE.md。
+
+---
+
+## 8.1 测试环境与公共契约（`_test/_smoke_env.js`）
+
+### 对外承诺的能力清单
+
+`_smoke_env.js` 只做环境装配、不含断言。其他套件依赖下列能力，**新增能力必须登记在文件头注释里；删除能力必须先确认无人依赖**。
+
+| 能力 | 谁依赖 |
+|---|---|
+| `global.window` / `global.document` | 全部需要 DOM 的套件 |
+| `global.__modals` / `global.__notices` | 断言弹窗与提示的套件 |
+| `global.__clipboard` | ★ `recorder.js` 写入、`quickadd.js` 读取 |
+| `global.navigator.clipboard.writeText` | 同上，**写入侧走这个** |
+| `check(name, cond, actual)` / `done()` | 断言器与收尾（设退出码） |
+
+★ 这条是三处链：环境装 → `recorder.js` 写 → `quickadd.js` 读。断在任意一处都表现为「剪贴板 5 项红」，但只有第一处是环境故障。
+
+### Node 兼容性（21+ 只读全局）
+
+Node 21+ 内置只读 getter 全局：`navigator` / `crypto` / `performance`。简单赋值在非严格模式下**静默失败**（不生效也不报错），必须走
+`Object.defineProperty(global, key, { value, writable: true, configurable: true, enumerable: true })`。
+
+新增任何全局 mock 前先 `Object.getOwnPropertyDescriptor(global, key)` 确认可写性。
+`global.window` / `global.document` / `global.__xxx` 不受影响（Node 未内置）。
+
+守卫：`_test/envcontract.js`（10 项）。其中「writeText 真的写入 `__clipboard`」是**行为验证**，
+只查 `typeof === 'function'` 抓不到「实现是空函数」。
+
+### 新增测试套件的登记要求
+
+1. 文件名不带 `_` 前缀（`_run_tests.sh` 跳过 `_` 前缀的公共环境）
+2. 同步 `build_card.py` 的 FILES 清单（曾漏登导致从卡片还原后丢一整个套件）
+3. 套件末尾输出 `套件: xxx` 并以退出码表达成败
 
 ---
 
@@ -1023,8 +1100,8 @@ Calendar 读 `window._bundledLocaleWeekSpec`，而它要等日历视图打开过
 
 | 事项 | 结论 |
 |---|---|
-| `node_modules/` | **必须提交** —— 是手写测试 mock（约 10.6KB），不是 npm 依赖。忽略它 = 克隆后 49 个套件全部 `MODULE_NOT_FOUND`，且 `npm install` 救不回来（无 `package.json`） |
+| `node_modules/` | **必须提交** —— 是手写测试 mock（约 10.6KB），不是 npm 依赖。忽略它 = 克隆后 55 个套件全部 `MODULE_NOT_FOUND`，且 `npm install` 救不回来（无 `package.json`） |
 | `package.json` | **不要新建** —— 将来 `npm install` 会覆盖手写 mock |
-| 提交前 | `bash _run_tests.sh` 必须 `通过 49 / 失败 0`；可配 `git config core.hooksPath .githooks` 自动跑 |
+| 提交前 | `bash _run_tests.sh` 必须 `通过 55 / 失败 0`；可配 `git config core.hooksPath .githooks` 自动跑 |
 | `time-tools/main.js` | 入库 —— Obsidian 安装只认 `main.js` / `manifest.json` / `styles.css` 三件 |
 | `time-tools.zip` / `启动卡/` / `_stage/` / `_archive_临时脚本/` / `__pycache__/` | 已忽略，不入库 |
