@@ -171,10 +171,18 @@ console.log('[4] 节日名带日期开关');
   check('开：正向带日期', run(on, 'festival', '2026-10-01') === '国庆节 2026-10-01');
   check('关：正向只给名称', run(off, 'festival', '2026-10-01') === '国庆节',
     run(off, 'festival', '2026-10-01'));
-  check('开：逆向带名称', /^国庆 \d{4}-10-01$/.test(run(on, 'festivalToDate', '国庆') || ''),
-    run(on, 'festivalToDate', '国庆'));
-  check('关：逆向只给日期', run(off, 'festivalToDate', '国庆') === '2026-10-01',
-    run(off, 'festivalToDate', '国庆'));
+  /*
+   * 逆向查询必须给固定基准：festivalToDate 的口径是「今年该节日已过完就看下一年」
+   * （跨年场景更贴合直觉），所以不传 base 时结果随运行日期漂移 ——
+   * 10-05 再跑「国庆」会变成 2027-10-01。给一个国庆之前的基准即可稳定。
+   */
+  const BEFORE_NATIONAL = new Date(Date.UTC(2026, 5, 1));
+  check('开：逆向带名称', /^国庆 \d{4}-10-01$/.test(
+    run(on, 'festivalToDate', '国庆', BEFORE_NATIONAL) || ''),
+  run(on, 'festivalToDate', '国庆', BEFORE_NATIONAL));
+  check('关：逆向只给日期',
+    run(off, 'festivalToDate', '国庆', BEFORE_NATIONAL) === '2026-10-01',
+    run(off, 'festivalToDate', '国庆', BEFORE_NATIONAL));
   check('默认值是开', settings.migrateSettings(null).timestamp.extensions.festivalPrefix === true);
 }
 

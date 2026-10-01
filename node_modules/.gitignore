@@ -1,0 +1,38 @@
+# ── 构建产物 / 交付包 ──
+# 交付包内容每次都变，进版本库会迅速膨胀；可由 src/ 经 node build.js 重建
+*.zip
+
+# ── 编辑器与系统 ──
+.DS_Store
+Thumbs.db
+*.swp
+*~
+
+# ── 日志 ──
+*.log
+
+# ── Python 缓存 ──
+__pycache__/
+*.pyc
+
+# ⚠️⚠️⚠️  下面这行【绝对不能加】  ⚠️⚠️⚠️
+#
+# node_modules/
+#
+# 原因：本工程的 node_modules 不是 npm 依赖，是【手写测试 mock】：
+#   node_modules/obsidian/index.js            9031 字节
+#   node_modules/@codemirror/state/index.js    541 字节
+#   node_modules/@codemirror/view/index.js    1078 字节
+# 合计约 10.6KB，首行写明「测试用的 obsidian mock（仅用于 Node 冒烟测试，不进插件包）」。
+#
+# 依赖范围（实测）：
+#   13 个 _test/*.js  require('obsidian')
+#    2 个 _test/*.js  require('@codemirror/...')
+#    多个 src/*.js（calendar / configio / i18n / main / note …）
+#
+# 已实测反证：把 src/ _test/ _run_tests.sh 复制到新目录但不复制 node_modules，
+# 跑 node _test/i18n.js → MODULE_NOT_FOUND，exit=1。
+# 一旦被忽略，克隆后 49 个套件全部挂掉，且 npm install 救不回来
+# （工程里没有 package.json，这三个包在 npm 上也不是这个内容）。
+#
+# 也不要新增 package.json —— 有了它，将来 npm install 反而可能覆盖手写 mock。

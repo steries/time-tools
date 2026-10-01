@@ -130,9 +130,11 @@ console.log('[highlight] 日历高亮语义');
 
 // ⑥ 今天只描边，不参与全填充
 {
-  const v = mkView({});
+  // 必须渲染「今天所在月」：渲染固定月时今天可能不在月内，is-today 取不到
+  const nowD = new Date();
+  const v = mkView({ year: nowD.getFullYear(), month: nowD.getMonth() });
   const r = scan(v);
-  check('只有今天带 is-today', r.today.join(',') === String(new Date().getDate()), r.today.join(','));
+  check('只有今天带 is-today', r.today.join(',') === String(nowD.getDate()), r.today.join(','));
   check('无选中时不产生任何全填充', r.pickedDay.length === 0 && r.wkPicked.length === 0);
 }
 
